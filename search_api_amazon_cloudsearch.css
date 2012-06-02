@@ -1,0 +1,11 @@
+.domain_status_PROCESSING,.domain_status_NEEDS_INDEXING {color:#E47911}
+.domain_status_ACTIVE {color:#007600}
+.domain_status_CREATING {color:#FF0000}
+.queue_status li {list-style-type:none; padding-left:0;margin-left:0;}
+.page-admin-config-search-aws-cloudsearch-indexing2 .form-submit {margin-top:12px;}
+.page-admin-config-search-aws-cloudsearch-indexing .form-submit {margin-top:12px;}
+.field_index_box {border:1px solid #CCC; padding:8px; float:left;margin:4px; height:84px;}
+.cloudsearch_update_required strong {color:#FF0000; font-weight:bold;}
+.cloudsearch_update_required {border: 1px solid #CCC; padding:4px 8px; margin:12px 0;}
+.inline-fieldset {border:0; margin:0;padding:0;}
+.inline-fieldset .fieldset-wrapper {margin:0; padding:0;}

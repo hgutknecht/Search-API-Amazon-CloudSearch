@@ -1,0 +1,15 @@
+<?php
+
+/**
+ * Implements hook_search_api_service_info().
+ */
+function search_api_cloudsearch_search_api_service_info() {
+  $services['search_api_cloudsearch_service'] = array(
+    'name' => t('CloudSearch service'),
+    'description' => t('Offers an implementation of the Search API that uses an Amazon AWS CloudSearch server for indexing content.'),
+    'class' => 'SearchApiCloudSearchService',
+  );
+  return $services;
+}
+
+

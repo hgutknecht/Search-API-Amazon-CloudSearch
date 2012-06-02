@@ -1,0 +1,18 @@
+name = Search API Amazon CloudSearch 
+description = Offers an implementation of the Search API that uses an Amazon AWS CloudSearch server for indexing content.
+dependencies[] = search_api
+package = Search
+core = 7.x
+
+files[] = service.inc
+files[] = aws_helper.inc
+files[] = AWSCloudSearchDomain.inc
+files[] = AWSCloudSearchQuery.inc
+
+version = "7.x-1.0-dev"
+core = "7.x"
+project = "search_api_amazon_cloudsearch"
+datestamp = "1338409317"
+
+cloudsearch_api_version = "2011-02-01"
+
