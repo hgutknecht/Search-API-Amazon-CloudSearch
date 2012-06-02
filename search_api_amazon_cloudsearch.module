@@ -3,13 +3,29 @@
 /**
  * Implements hook_search_api_service_info().
  */
-function search_api_cloudsearch_search_api_service_info() {
+function search_api_amazon_cloudsearch_search_api_service_info() {
   $services['search_api_cloudsearch_service'] = array(
-    'name' => t('CloudSearch service'),
+    'name' => t('Amazon CloudSearch service'),
     'description' => t('Offers an implementation of the Search API that uses an Amazon AWS CloudSearch server for indexing content.'),
     'class' => 'SearchApiCloudSearchService',
   );
   return $services;
 }
+
+function search_api_amazon_cloudsearch_menu() {
+  $items['cloudsearch/getpublicip'] = array(
+    'description' => 'Manage you CloudSearch Domains', 
+    'page callback' => 'search_api_amazon_cloudsearch_getpublicip', 
+    'access arguments' => array(TRUE), 
+    'type' =>  MENU_CALLBACK, 
+  );
+  return $items;
+}
+
+function search_api_amazon_cloudsearch_getpublicip() {
+  drupal_add_http_header('Content-Type', 'text/plain; utf-8');
+  echo $_SERVER['REMOTE_ADDR'];
+}
+
 
 

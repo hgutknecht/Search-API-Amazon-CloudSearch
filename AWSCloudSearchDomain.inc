@@ -37,19 +37,20 @@ class AWSCloudSearchDomain {
     $this->_index_machine_name = $index_machine_name;
     $this->_document_batch_action = str_replace('{API_VERSION}', $options['cloudsearch_api_version'], $this->_document_batch_action); 
     $this->_cloud_search_instance = AWSCloudSearchHelper::getAWSCloudSearchInstance_Manual($options['aws_access_key'], $options['aws_secret_key'], $options['region']);
-    $this->_domain_doc_endpoint = $options['document_endpoint'];
+    if (!empty($this->_domain_doc_endpoint)) {
+      $this->_domain_doc_endpoint = $options['document_endpoint'];  
+    }
   }
   
   public function get_domain_details() {
     $details =  $this->_cloud_search_instance->describe_domains(array(
         'DomainNames' => $this->_domain_name
     ));
-    
-    
-    
+     
     return $details;
   }
   
+
   /**
    * Looks at all the various status fields for this Domain and returns if it's in an active state.
    * This is an important check before uploading documents to the domain as they won't get uploading
@@ -165,7 +166,7 @@ class AWSCloudSearchDomain {
     
     $response = $this->_cloud_search_instance->define_index_field($this->_domain_name, $options);
     
-    return $response->isOK();
+    return AWSCloudSearchHelper::checkAndReport(t('Add index'), $response, TRUE);
   }
   
   /**
@@ -181,7 +182,7 @@ class AWSCloudSearchDomain {
   private function remove_index($index_field) {
     $index_field = self::encode_index_name($this->_index_machine_name, $index_field);
     $response = $this->_cloud_search_instance->delete_index_field($this->_domain_name, $index_field);
-      return $response->isOK();
+    return AWSCloudSearchHelper::checkAndReport(t('Delete index'), $response, TRUE);
   }
   
   /**
@@ -204,7 +205,8 @@ class AWSCloudSearchDomain {
    *   
    */  
   private function index_documents() {
-    return $this->_cloud_search_instance->index_documents($this->_domain_name)->isOK();  
+    $response = $this->_cloud_search_instance->index_documents($this->_domain_name);
+    return AWSCloudSearchHelper::checkAndReport(t('Index documents'), $response, TRUE);  
   }
   
 
@@ -246,14 +248,7 @@ class AWSCloudSearchDomain {
     }
  
     foreach ($delete_fields as $field) {
-      
       $response = $this->remove_index($field);
-    
-      if (!$response->isOK()) {
-        $success = FALSE;
-        $errors[] = $response;
-       
-      }
       $deleted_count++;
     }
     
@@ -286,17 +281,11 @@ class AWSCloudSearchDomain {
       }
     }
     
-    $msg = t('CloudSearch Index update status: Deleted: ') . $deleted_count . ' ' . t('Updated/New') . ': ' . $new_updated_count . ' ' . t('Not modified') . ':' . $ignored_count;
+    $msg = t('CloudSearch Index update status: Deleted:') . $deleted_count . ' ' . t('Updated/New') . ': ' . $new_updated_count . ' ' . t('Not modified') . ':' . $ignored_count;
     drupal_set_message(check_plain($msg)); 
    
     //now tell CloudSearch to start indexing 
-    $response = $this->index_documents();
-    if (!$response->isOK()) {
-      $success = FALSE;
-      $errors[] = $response;
-    }
-   
-    return $success;
+    return $this->index_documents();
   }
 
   /**
@@ -423,9 +412,22 @@ class AWSCloudSearchDomain {
          'version' => time(), 
          'lang' => 'en', //do something better  
          'fields' => $values, 
-      );   
-    } 
-    $this->submit_json_request(json_encode($json));
+      ); 
+      
+    }
+    
+    $status = $this->submit_json_request(json_encode($json));
+    return TRUE;
+    
+    /* EXPERIMENTAL CODE FOR INFORMING THE CALLING THAT THE SEND FAILED
+    if ($status != "200") {
+      watchdog('aws_cloudsearch', 'Failed to call Document endpoint.  Got status code:' . $status, NULL, WATCHDOG_CRITICAL, $link = NULL);
+      return FALSE;
+    }
+    else {
+      return TRUE;
+    }*/
+    
   }
 
 
@@ -452,6 +454,34 @@ class AWSCloudSearchDomain {
   }
   
   /**
+   * Add an ip address to the CloudSearch access policy 
+   */
+  public function add_ip_access_policy($ip_address) {
+    $ip_address = $ip_address . "/32";
+    $details = $this->get_domain_status();
+    $search_arn = (string)$details->SearchService->Arn;
+    $doc_arn = (string)$details->DocService->Arn;
+   
+    $response = $this->_cloud_search_instance->describe_service_access_policies($this->_domain_name);
+    $options = json_decode($response->body->DescribeServiceAccessPoliciesResult->AccessPolicies->Options);
+
+
+    //build up IAM Json document for doc and search endpoint
+    $options->Statement[] = array('Effect' => 'Allow',
+                                  'Action' => '*',
+                                  'Resource' => $search_arn,
+                                  'Condition' => array('IpAddress' => array('aws:SourceIp' => array($ip_address))));
+    $options->Statement[] = array('Effect' => 'Allow',
+                                  'Action' => '*',
+                                  'Resource' => $doc_arn,
+                                  'Condition' => array('IpAddress' => array('aws:SourceIp' => array($ip_address))));  
+                                    
+    $response = $this->_cloud_search_instance->update_service_access_policies($this->_domain_name, json_encode($options));
+    
+    return AWSCloudSearchHelper::checkAndReport(t('Add ip to access policy'), $response, FALSE);
+  }
+  
+  /**
    *  Helper - takes the JSON SDF document and sends to the CloudSearch document endpoint  
    */  
   private function submit_json_request($json) {
@@ -463,9 +493,11 @@ class AWSCloudSearchDomain {
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
     curl_setopt($ch, CURLOPT_POST, 1); 
     curl_setopt($ch, CURLOPT_POSTFIELDS, $json); 
-    $response = curl_exec($ch); 
-    curl_close($ch); 
-    return $response;
+    $response = curl_exec($ch);
+    $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+     
+    return $status;
   }
    
   /**
@@ -478,7 +510,7 @@ class AWSCloudSearchDomain {
   * Helper - Decodes a CloudSearch index back into the Search API field name
   */
   public static function decode_index_name($index_name, $field_name) {
-    return str_replace('____',':', str_replace($index_name . '_', '', $field_name));
+    return str_replace('____', ':', str_replace($index_name . '_', '', $field_name));
   }
   
   /**

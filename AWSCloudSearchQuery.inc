@@ -146,7 +146,7 @@ class AWSCloudSearchQuery {
     $bq .= '(' . strtolower($filter->GetConjunction()) . ' ';
     foreach ($filter->getFilters() as $f) {
        if (is_array($f)) {
-       	 $val = $this->getFinalFieldFilterValue($f);
+      $val = $this->getFinalFieldFilterValue($f);
          $fname = AWSCloudSearchDomain::encode_index_name($this->_index_machine_name, $f[0]);
          $bq .= "{$fname}:{$val} "; //trailing space required
        } 
@@ -165,13 +165,13 @@ class AWSCloudSearchQuery {
    *  
   */
   private function getFinalFieldFilterValue($field) {
-  	$type = $this->_query->getIndex()->options['fields'][$field[0]]['type']; 
-	if ($type == 'integer') {
-			return $field[1];
-	}
-	else {
-			return "'$field[1]'";
-	}  	 
+    $type = $this->_query->getIndex()->options['fields'][$field[0]]['type']; 
+  if ($type == 'integer') {
+      return $field[1];
+  }
+  else {
+      return "'$field[1]'";
+  }     
   }
   
   /**

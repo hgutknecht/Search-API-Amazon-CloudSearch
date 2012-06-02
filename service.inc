@@ -11,9 +11,11 @@
 class SearchApiCloudSearchService extends SearchApiAbstractService {
   
   public function configurationForm(array $form, array &$form_state) {
+    
     $form['intro'] = array(
       '#type' => 'markup', 
-      '#markup' => '<p>' . t('Add a CloudSearch domain to the site.  You can either link an existing CloudSearch domain or create a new one.  Start by entering you AWS account\'s credentials which can be found by going to the security area of the ' . l(t('AWS portal site.'), 'https://aws-portal.amazon.com/gp/aws/securityCredentials', array('attributes' => array('target' => '_blank')))) . '</p>', 
+      '#markup' => '<p>' . t('Either link an existing CloudSearch domain or create a new one.  Start by entering you AWS account\'s credentials which can be found by going to the security area of the ' . l(t('AWS portal site.'), 'https://aws-portal.amazon.com/gp/aws/securityCredentials', array('attributes' => array('target' => '_blank')))) . '
+                    <em>If you create a new domain Amazon will start charging your account as soon as it has loaded.  It\'s strongly recommended you check you AWS console after the domain is created to ensure it is setup to your satisfaction. ' . l(t('Amazon CloudSearch Pricing'), 'http://aws.amazon.com/cloudsearch/pricing/', array('attributes' => array('target' => '_blank'))) . '</em></p>', 
     );
     
     $form['aws_access_key'] = array(
@@ -43,15 +45,33 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
           '#type'  => 'textfield', 
           '#title'  => t('Search domain name'), 
           '#required' => TRUE, 
+          '#maxlength' => 28, //as defined by AWS 
           '#default_value' => empty($this->options) ? '' : $this->options['domain_name'], 
     );
     
-    $form['show_debug'] = array(
-          '#type'  => 'checkbox', 
-          '#title'  => t('Show debug info'), 
-          '#default_value' => empty($this->options) ? '' : $this->options['show_debug'], 
-    );
-    
+    if (empty($this->options)) {
+      $form['create_new_domain'] = array(
+            '#type'  => 'checkbox', 
+            '#title'  => t('Create new domain?'),
+            '#description' => t('Checking this will create the above domain in your CloudSearch account. Amazon will start charging by the hour as soon as the domain is loaded.  For full pricing details visit') . ' ' . l(t('Amazon CloudSearch Pricing'), 'http://aws.amazon.com/cloudsearch/pricing/', array('attributes' => array('target' => '_blank'))), 
+      );   
+      
+      //get servers ip for doc and search endpoint access policy setup 
+      $localIPAddress=$this->get_external_ip();
+      if ($localIPAddress == "ERROR") {
+        drupal_set_message(t('Failed to find this servers public IP address. This is required by CloudSearch to restrict access to the document and search endpoints. Please fill in your SERVERS PUBLIC ip address in the field provided.  You can change/manage access policies within the AWS console.') , 'warning');
+        $localIPAddress = "";
+      }
+      $form['access_ip'] = array(
+        '#type'  => 'textfield', 
+        '#title'  => t('Access policy: IP address'), 
+        '#required' => FALSE,
+        '#description' => t('CloudSearch restricts access to it\'s search and document endpoints to specific IP Addresses.  The preselected IP address is the best guess of this servers public IP address. Please change it if it is not correct.  Access policies can be managed from the AWS console.'), 
+        '#maxlength' => 15, //ipv4
+        '#default_value' => $localIPAddress, 
+      );  
+    }  
+      
     $form['cloudsearch_api_version'] = array(
       '#type'  => 'textfield', 
       '#title'  => t('API Version'), 
@@ -59,7 +79,32 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
       '#default_value' => '2011-02-01', 
     );
     
+    $form['show_debug'] = array(
+          '#type'  => 'checkbox', 
+          '#title'  => t('Show debug info'), 
+          '#description' => t('If checked the CloudSearch request and response will be shown when a search is performed. Note this is for development purposes has no access restrictions'),
+          '#default_value' => empty($this->options) ? '' : $this->options['show_debug'], 
+    );    
+    
     return $form;
+  }
+  
+  /**
+   * Helpder - Get servers external IP Address
+   * Rough and ready way of getting the external ip address of this server.
+   */ 
+  function get_external_ip() {
+      $ch = curl_init("http://icanhazip.com/");
+      curl_setopt($ch, CURLOPT_HEADER, FALSE);
+      curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
+      $result = curl_exec($ch);
+      curl_close($ch);
+      if ($result === FALSE) {
+          return "ERROR";
+      } 
+      else {
+          return trim($result);
+      }
   }
 
 
@@ -77,18 +122,61 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
    *   The complete form state.
    */
   public function configurationFormValidate(array $form, array &$values, array &$form_state) {
+    $domain_name = $form_state['values']['options']['form']['domain_name'];
     
-     $cloudsearch = AWSCloudSearchHelper::getAWSCloudSearchInstance_Manual($form_state['values']['options']['form']['aws_access_key'], $form_state['values']['options']['form']['aws_secret_key'], $form_state['values']['options']['form']['region']);
-     $response = $cloudsearch->describe_domains(array('DomainNames' => $form_state['values']['options']['form']['domain_name']));
-     if (count($response->body->DescribeDomainsResult->DomainStatusList->member) == 0) {
-        form_error($form['domain_name'], t('Search domain not found, please check your details and try again'));
-     }
+   
+    //check domain
+    preg_match("/[a-z][a-z0-9-]+/", $domain_name, $domain_match);
+    if (strlen($domain_name) < 3 ) {
+      form_error($form['domain_name'], t('Domain name must be between 3 and 28 characters.'));
+      return;      
+    }
+    elseif (count($domain_match) > 0 && $domain_match[0] != $domain_name) {
+      form_error($form['domain_name'], t('Domain name entered has some invalid chacters. Please check and try again.'));
+      return;      
+    }
     
-     $form_state['storage']['search_endpoint'] = (string)$response->body->DescribeDomainsResult->DomainStatusList->member->SearchService->Endpoint;
-     $form_state['storage']['document_endpoint'] = (string)$response->body->DescribeDomainsResult->DomainStatusList->member->DocService->Endpoint;
-     
-  }
+    if (!empty($values['access_ip']) && strlen($values['access_ip']) > 0 && $this->validIP($values['access_ip']) == FALSE) {
+      form_error($form['access_ip'], t('The IP address was not valid, please check and try again.'));
+      return;
+    }
+    
+   
+    $cloudsearch = AWSCloudSearchHelper::getAWSCloudSearchInstance_Manual($form_state['values']['options']['form']['aws_access_key'], $form_state['values']['options']['form']['aws_secret_key'], $form_state['values']['options']['form']['region']);
+    
+    $new = empty($form_state['values']['options']['form']['create_new_domain']) ? FALSE : $form_state['values']['options']['form']['create_new_domain'];
+    
+    if ($new == TRUE) {
+      $response = $cloudsearch->describe_domains(array('DomainNames' => $domain_name));      
+    } 
+    else {
+      $response = $cloudsearch->describe_domains(array('DomainNames' => $domain_name));      
+    }
+  
+    if (!$response->isOK()) {
+      AWSCloudSearchHelper::checkAndReport(t('Retrieve domain details'), $response, FALSE);
+      form_error($form['aws_access_key'], check_plain(t('Failed to request domain details from CloudSearch.') . ': ' . AWSCloudSearchHelper::getAWSError($response)));
+      return;
+    }
 
+    if ($new == TRUE && count($response->body->DescribeDomainsResult->DomainStatusList->member) > 0) {
+      form_error($form['aws_access_key'], t('You have selected to create a new domain but this domain already exists.'));
+      return;      
+    }
+    
+    //This isn't a new domain so check it actually exists and raise an error if not
+    if ($new == FALSE) {
+      if (count($response->body->DescribeDomainsResult->DomainStatusList->member) == 0) {
+         form_error($form['domain_name'], t('Search domain not found, please check your details and try again.  If you want to create a new domain then tick the Create new domain checkbox.'));
+      }
+      else{
+        $form_state['storage']['search_endpoint'] = (string)$response->body->DescribeDomainsResult->DomainStatusList->member->SearchService->Endpoint;
+        $form_state['storage']['document_endpoint'] = (string)$response->body->DescribeDomainsResult->DomainStatusList->member->DocService->Endpoint;         
+      }
+    }
+    
+
+  }
 
   /**
    * Submit callback for the form returned by configurationForm().
@@ -104,17 +192,56 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
    *   The complete form state.
    */
   public function configurationFormSubmit(array $form, array &$values, array &$form_state) {
+    if (empty($values['create_new_domain']) == FALSE && $values['create_new_domain'] == TRUE) {
+      //CREATE NEW DOMAIN IN CLOUDSEARCH
+      $cloudsearch = AWSCloudSearchHelper::getAWSCloudSearchInstance_Manual($values['aws_access_key'], $values['aws_secret_key'], $values['region']);
+      $response = $cloudsearch->create_domain($values['domain_name']);
+      if (!$response->isOK()) {
+        AWSCloudSearchHelper::checkAndReport(t('Create domain'), $response, TRUE);
+        return;
+      }
+      $response = $cloudsearch->describe_domains(array('DomainNames' => $values['domain_name']));
+      if (!$response->isOK()) {
+        AWSCloudSearchHelper::checkAndReport(t('Retrieve domain'), $response, TRUE);
+        return;
+      }   
+      //set end points to constant as they will not be available straight away
+      $values['search_endpoint']= "NEW";
+      $values['document_endpoint'] = "NEW";
+      
+      unset($values['create_new_domain']);
+      drupal_set_message(t('The CloudSearch domain was created successfully.  It will take a few minutes for the domain to fully initialise.  Please allow some and check the domain status is Active before indexing items.'));
+         
+    }
+    else {
+      $values['search_endpoint'] = $form_state['storage']['search_endpoint'];
+      $values['document_endpoint'] = $form_state['storage']['document_endpoint'];
+    }
     
     if (!empty($this->options)) {
-      $values += $this->options;
-      
+     $values += $this->options;
     }
-    $values['search_endpoint'] = $form_state['storage']['search_endpoint'];
-    $values['document_endpoint'] = $form_state['storage']['document_endpoint'];
-    
-    $this->options = $values;
-    
+    $this->options = $values;       
+     
+    if (!empty($values['access_ip']) && strlen($values['access_ip']) > 0) {
+      $csdomain = new AWSCloudSearchDomain($values, NULL); 
+      $csdomain->add_ip_access_policy($values['access_ip']);
+    }
+
+       
   }
+
+  /**
+   * Helper - returns true if valid IP address
+   */
+  function validIP($ip) { 
+      if (preg_match("^([1-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])(\.([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])){3}^", $ip))
+          return TRUE;
+      else
+          return FALSE;
+  } 
+
+  
 
   /**
    * Determines whether this service class implementation supports a given
@@ -158,13 +285,14 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
       }
     }
     
-    
+    $this->check_domain_loaded(true);
+
+ 
     $output .= '<dt><strong>' . t('CloudSearch status') . '</strong></dt>' . "\n";
     
     $csdomain = new AWSCloudSearchDomain($this->options, NULL);
     $domain_details = get_object_vars($csdomain->get_domain_status());
-    //var_dump($domain_details);
-    //die();
+
     $this->build_domain_details($domain_details, $domain_options);
     foreach ($domain_options as $key => $value) {
       $output .= '<dt>' . check_plain($key) . '</dt>' . "\n";
@@ -206,62 +334,41 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
    *   The index to add.
    */
   public function addIndex(SearchApiIndex $index) {
-    $csdomain = new AWSCloudSearchDomain($this->options, $index->machine_name);
-    if ($csdomain->is_active()) {
-      $csdomain->update_indexes($index);
-      $msg = t('CloudSearch indexes were updated. It can take up to 10 minutes for the indexes to be processed. During this time no items can be added to CloudSearch', information);
-      drupal_set_message($msg, 'error');
-    } 
-    else{
-      $msg = t('Unable to add an index as CloudSearch is not currently in an active state.');
-      drupal_set_message($msg, 'error');
-      watchdog('search_api_cloudwatch', check_plain($msg), NULL, WATCHDOG_WARNING);
-    }
+    $this->check_domain_loaded(true);
     
-  }
-
-  /**
-   * Notify the server that the indexed field settings for the index have
-   * changed.
-   * If any user action is necessary as a result of this, the method should
-   * use drupal_set_message() to notify the user.
-   *
-   * @param SearchApiIndex $index
-   *   The updated index.
-   *
-   * @return
-   *   TRUE, if this change affected the server in any way that forces it to
-   *   re-index the content. FALSE otherwise.
-   */
-  public function fieldsUpdated(SearchApiIndex $index) {
     $csdomain = new AWSCloudSearchDomain($this->options, $index->machine_name);
-    if ($csdomain->is_active() || 1==1) {
-      $csdomain->update_indexes($index);
-    } 
-    else{
-      $msg = t('Unable to add an index as CloudSearch is not currently in an active state.');
-      drupal_set_message(check_plain($msg), 'error');
-      watchdog('search_api_cloudwatch', check_plain($msg), NULL, WATCHDOG_WARNING);
-    }
+    $csdomain->update_indexes($index);
+    drupal_set_message(t('CloudSearch indexes were updated. It can take up to 10 minutes for the indexes to be processed. During this time no items can be added to CloudSearch'));
   }
 
+  public function fieldsUpdated(SearchApiIndex $index) {
+    $this->check_domain_loaded(true);
+    
+    $csdomain = new AWSCloudSearchDomain($this->options, $index->machine_name);
+    $csdomain->update_indexes($index);
+  }
   
   public function indexItems(SearchApiIndex $index, array $items) {
-  	
+    $this->check_domain_loaded(true);
+    
     $csdomain = new AWSCloudSearchDomain($this->options, $index->machine_name);
-    if ($csdomain->is_active()) {
-      $csdomain->update_documents($items);
-      return array_keys($items);
+    if ($csdomain->update_documents($items) == TRUE) {
+      if ($csdomain->is_active()) {
+        drupal_set_message(t('Documents were sent but the domain is currently processing changes to indexes. These documents will not be indexed until the domain has completed it\'s processing.'), 'warning');  
+      }
+      return array_keys($items);  
     } 
-    else{
-      $msg = t('Unable to add an index as CloudSearch is not currently in an active state.');
-      drupal_set_message(check_plain($msg), 'error');
-      watchdog('search_api_cloudwatch', check_plain($msg), NULL, WATCHDOG_WARNING);
-    }    
-    return array();
+    else {
+      drupal_set_message(t('Failed when calling CloudSearch document endpoint. See Reports >> Recent entries for more information.'), 'error');
+      return array();
+    }
+        
+    
   }
   
   public function deleteItems($ids = 'all', SearchApiIndex $index = NULL) {
+    $this->check_domain_loaded(true);
+       
     if ($ids == 'all' && $index == NULL) {
       $ids = array();
       drupal_set_message(t('SearchAPI CloudSearch does not currently support the removal of all documents.'), 'warning');
@@ -269,8 +376,11 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
     $csdomain = new AWSCloudSearchDomain($this->options, $index->machine_name);
     if ($ids == 'all') {
       //get all ids for index type
-      $ids = entity_load($index->item_type);
-      $csdomain->remove_documents($ids);
+      $query = new EntityFieldQuery;
+      $result = $query
+        ->entityCondition('entity_type', $index->item_type)
+        ->execute();
+      $csdomain->remove_documents(array_keys($result[$index->item_type]));
     }
     else {
       $csdomain->remove_documents($ids);
@@ -280,6 +390,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
   
   
   public function search(SearchApiQueryInterface $query) {
+    $this->check_domain_loaded(true);
     $start_time = microtime(TRUE);
     $csdomain = new AWSCloudSearchQuery($this->options, $query->getIndex()->machine_name);
     $time_processing_done = microtime(TRUE);
@@ -294,6 +405,50 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
     );
     return $results;
    
+  }
+  
+  /**
+   * Helper - refreshes the document endpoints for this domain 
+   */
+  public function refresh_endpoints() {
+   $csdomain = new AWSCloudSearchDomain($this->options, NULL);
+   $status = $csdomain->get_domain_status();
+  
+   if (isset($status->SearchService->Endpoint) && isset($status->DocService->Endpoint)) {
+      $ops = $this->options;
+      $ops['search_endpoint'] = (string)$status->SearchService->Endpoint;
+      $ops['document_endpoint'] = (string)$status->DocService->Endpoint;
+      $this->server->update(array('options' => $ops));
+      return TRUE;
+   }
+   else {
+     $this->server->update(array('enabled' => 0));  //disable server if endpoints are available
+     drupal_set_message(t('CloudSearch domain endpoints are currently unavailable. This is likely due to the domain having been recently created. It can take some time for the domain to be created.  This domain will not be enabled until the endpoints are available, this normally takes a few minutes.'), 'warning');
+     return FALSE;
+   }
+       
+  }
+  
+  /**
+   * Helper - checks to see if the endpoint options are set, if not it will go to CloudSearch and check to see if the endpoints are now configured.
+   * If they are it will update options.  If not it will ensure this server is disabled and report.
+   */      
+  public function check_domain_loaded($refresh = FALSE) {
+    if ($this->options['document_endpoint'] == 'NEW' 
+          || $this->options['search_endpoint'] == 'NEW'
+            || $this->options['search_endpoint'] == ''
+              || $this->options['search_endpoint'] == '') {
+      if ($refresh == TRUE) {
+        if ($this->refresh_endpoints() == TRUE) {
+          drupal_set_message(t('CloudSearch domain endpoints are now available. This domain is fully active and ready to be configured'));
+          return TRUE;
+        }
+      }
+      return FALSE;
+    }
+    else {
+      return TRUE;
+    }
   }
   
  
