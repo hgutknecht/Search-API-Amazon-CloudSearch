@@ -287,14 +287,14 @@ class AWSCloudSearchQuery {
     curl_setopt($ch, CURLOPT_HEADER, 0); 
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
     $response = curl_exec($ch); 
+    curl_close($ch);
     
     if ($this->_options['show_debug']) {
       $msg1 = t('CLOUDSEARCH DEBUG SEARCH RESPONSE');
       $msg2 = t('This is the JSON response from CloudSearch given the URL above:');
       drupal_set_message(filter_xss("<strong>{$msg1}</strong><br/>{$msg2}<br/>") . $response, 'warning');    
     }
-    
-    curl_close($ch); 
+     
     return $response;
   }
   

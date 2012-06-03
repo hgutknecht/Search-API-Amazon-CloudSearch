@@ -12,6 +12,11 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
   
   public function configurationForm(array $form, array &$form_state) {
     
+    if (!$this->aws_sdk_setup()) {
+      drupal_set_message('AWS SDK for PHP is not installed. You cannot proceed until the SDK is installed.  Please follow the instructions in README.txt.','error');
+      return;
+    }
+    
     $form['intro'] = array(
       '#type' => 'markup', 
       '#markup' => '<p>' . t('Either link an existing CloudSearch domain or create a new one.  Start by entering you AWS account\'s credentials which can be found by going to the security area of the ' . l(t('AWS portal site.'), 'https://aws-portal.amazon.com/gp/aws/securityCredentials', array('attributes' => array('target' => '_blank')))) . '
@@ -123,8 +128,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
    */
   public function configurationFormValidate(array $form, array &$values, array &$form_state) {
     $domain_name = $form_state['values']['options']['form']['domain_name'];
-    
-   
+
     //check domain
     preg_match("/[a-z][a-z0-9-]+/", $domain_name, $domain_match);
     if (strlen($domain_name) < 3 ) {
@@ -192,6 +196,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
    *   The complete form state.
    */
   public function configurationFormSubmit(array $form, array &$values, array &$form_state) {
+  
     if (empty($values['create_new_domain']) == FALSE && $values['create_new_domain'] == TRUE) {
       //CREATE NEW DOMAIN IN CLOUDSEARCH
       $cloudsearch = AWSCloudSearchHelper::getAWSCloudSearchInstance_Manual($values['aws_access_key'], $values['aws_secret_key'], $values['region']);
@@ -350,12 +355,15 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
   
   public function indexItems(SearchApiIndex $index, array $items) {
     $this->check_domain_loaded(true);
-    
+
     $csdomain = new AWSCloudSearchDomain($this->options, $index->machine_name);
+    
+    if (!$csdomain->is_active()) {
+      drupal_set_message(t('Domain currently not in a state to accept documents. This is likely to be because index fields have been updated and the domain is processing these changes which can take some time.'), 'warning');
+      return array();  
+    }
+    
     if ($csdomain->update_documents($items) == TRUE) {
-      if ($csdomain->is_active()) {
-        drupal_set_message(t('Documents were sent but the domain is currently processing changes to indexes. These documents will not be indexed until the domain has completed it\'s processing.'), 'warning');  
-      }
       return array_keys($items);  
     } 
     else {
@@ -363,7 +371,6 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
       return array();
     }
         
-    
   }
   
   public function deleteItems($ids = 'all', SearchApiIndex $index = NULL) {
@@ -434,6 +441,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
    * If they are it will update options.  If not it will ensure this server is disabled and report.
    */      
   public function check_domain_loaded($refresh = FALSE) {
+
     if ($this->options['document_endpoint'] == 'NEW' 
           || $this->options['search_endpoint'] == 'NEW'
             || $this->options['search_endpoint'] == ''
@@ -449,6 +457,27 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
     else {
       return TRUE;
     }
+  }
+
+  /**
+   * Helper - Checks to see if AWS SDK for PHP is installed. 
+   */
+  function aws_sdk_setup() {
+    
+    if (file_exists(drupal_get_path('module', 'search_api_amazon_cloudsearch'). '/AWSSDKforPHP/sdk.class.php')) {
+      return true;
+    }
+  
+    //check each include path to see if AWSSDKforPHP is under any of them
+    $paths = explode(PATH_SEPARATOR, get_include_path());
+    
+    foreach ($paths as $path) {
+      if (file_exists($path . '/AWSSDKforPHP/sdk.class.php')) {
+        return true;
+      }        
+    }
+  
+    return false;
   }
   
  

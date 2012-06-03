@@ -37,7 +37,7 @@ class AWSCloudSearchDomain {
     $this->_index_machine_name = $index_machine_name;
     $this->_document_batch_action = str_replace('{API_VERSION}', $options['cloudsearch_api_version'], $this->_document_batch_action); 
     $this->_cloud_search_instance = AWSCloudSearchHelper::getAWSCloudSearchInstance_Manual($options['aws_access_key'], $options['aws_secret_key'], $options['region']);
-    if (!empty($this->_domain_doc_endpoint)) {
+    if (!empty($options['document_endpoint'])) {
       $this->_domain_doc_endpoint = $options['document_endpoint'];  
     }
   }
@@ -415,7 +415,7 @@ class AWSCloudSearchDomain {
       ); 
       
     }
-    
+
     $status = $this->submit_json_request(json_encode($json));
     return TRUE;
     
@@ -489,14 +489,13 @@ class AWSCloudSearchDomain {
     curl_setopt($ch, CURLOPT_URL, 'http://' . $this->_domain_doc_endpoint . $this->_document_batch_action);//need endpoint action configured in settings
     curl_setopt($ch, CURLOPT_HEADER, 0); 
     curl_setopt($ch, CURLOPT_HTTPHEADER, array("Content-Type:application/json")); 
-    curl_setopt($ch, CURLOPT_NOBODY, TRUE); 
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
+    curl_setopt($ch, CURLOPT_NOBODY, 1); 
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
     curl_setopt($ch, CURLOPT_POST, 1); 
     curl_setopt($ch, CURLOPT_POSTFIELDS, $json); 
     $response = curl_exec($ch);
     $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
-     
     return $status;
   }
    
