@@ -266,7 +266,7 @@ class AWSCloudSearchDomain {
       
         $this->add_index($name, $index_type, $facet, FALSE, $searchable, NULL);
         
-        //have to created seperate fields for any index that needs to be sorted and faceted
+        //have to create seperate fields for any index that needs to be sorted and faceted
         if ($sortable == TRUE && $facet == 1) {
           $sort_field_name = 'sort_' . $name;
           if ($field_info['type'] == 'decimal') {
@@ -392,10 +392,11 @@ class AWSCloudSearchDomain {
         $name = self::encode_index_name($this->_index_machine_name, $name);
         if ($value['value'] != NULL) {
           if ($value['type'] == 'tokens') { //CloudSearch doesn't support tokens like this so just combine it back into a string
+             $combined = '';
              foreach ($value['value'] as $token) {
-               $value .= $token['value'] . ' ';
+               $combined .= $token['value'] . ' ';
              }
-              $values[$name] = rtrim($value, ' ');            
+             $values[$name] = rtrim($combined, ' ');            
           }
           elseif (is_array($value['value'])) {
             foreach ($value['value'] as $val)
