@@ -13,7 +13,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
   public function configurationForm(array $form, array &$form_state) {
     
     if (!$this->aws_sdk_setup()) {
-      drupal_set_message('AWS SDK for PHP is not installed. You cannot proceed until the SDK is installed.  Please follow the instructions in README.txt.','error');
+      drupal_set_message(t('AWS SDK for PHP is not installed. You cannot proceed until the SDK is installed.  Please follow the instructions in README.txt.'), 'error');
       return;
     }
     
@@ -387,7 +387,9 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
       $result = $query
         ->entityCondition('entity_type', $index->item_type)
         ->execute();
-      $csdomain->remove_documents(array_keys($result[$index->item_type]));
+      if (isset($result[$index->item_type])) {
+        $csdomain->remove_documents(array_keys($result[$index->item_type]));
+      }
     }
     else {
       $csdomain->remove_documents($ids);
@@ -464,8 +466,8 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
    */
   function aws_sdk_setup() {
     
-    if (file_exists(drupal_get_path('module', 'search_api_amazon_cloudsearch'). '/AWSSDKforPHP/sdk.class.php')) {
-      return true;
+    if (file_exists(drupal_get_path('module', 'search_api_amazon_cloudsearch') . '/AWSSDKforPHP/sdk.class.php')) {
+      return TRUE;
     }
   
     //check each include path to see if AWSSDKforPHP is under any of them
@@ -473,11 +475,11 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
     
     foreach ($paths as $path) {
       if (file_exists($path . '/AWSSDKforPHP/sdk.class.php')) {
-        return true;
+        return TRUE;
       }        
     }
   
-    return false;
+    return FALSE;
   }
   
  
