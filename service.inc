@@ -27,14 +27,16 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
       '#type' => 'textfield', 
       '#title' => 'AWS Access Key', 
       '#required' => TRUE, 
-      '#default_value' => empty($this->options) ? '' : $this->options['aws_access_key'], 
+      '#default_value' => empty($this->options) ? '' : $this->options['aws_access_key'],
+      '#description' => t('The access key of the AWS account you would like to use.'), 
       '#size' => 25, 
     );
     $form['aws_secret_key'] = array(
       '#type' => 'textfield', 
       '#title' => 'AWS Secret Key', 
       '#required' => TRUE, 
-      '#default_value' => empty($this->options) ? '' : $this->options['aws_secret_key'], 
+      '#default_value' => empty($this->options) ? '' : $this->options['aws_secret_key'],
+      '#description' => t('The secret key of the AWS account you would like to use.'), 
       '#size' => 50, 
     );
 
@@ -42,7 +44,8 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
           '#type'  => 'select', 
           '#title'  => t('Region'), 
           '#required' => TRUE, 
-          '#options' => array('cloudsearch.us-east-1.amazonaws.com' => 'us-east-1'), 
+          '#options' => array('cloudsearch.us-east-1.amazonaws.com' => 'us-east-1'),
+          '#description' => t('The region the current domain is in or where you would like to put the new domain.'), 
           '#default_value' => empty($this->options) ? '' : $this->options['region'], 
     );         
    
@@ -71,7 +74,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
         '#type'  => 'textfield', 
         '#title'  => t('Access policy: IP address'), 
         '#required' => FALSE,
-        '#description' => t('CloudSearch restricts access to it\'s search and document endpoints to specific IP Addresses.  The preselected IP address is the best guess of this servers public IP address. Please change it if it is not correct.  Access policies can be managed from the AWS console.'), 
+        '#description' => t('CloudSearch restricts access to it\'s search and document endpoints to specific IP Addresses.  The pre-selected IP address is the best guess of this servers public IP address. Please change it if it is not correct.  Access policies can be managed from the AWS console.'), 
         '#maxlength' => 15, //ipv4
         '#default_value' => $localIPAddress, 
       );  
@@ -80,7 +83,8 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
     $form['cloudsearch_api_version'] = array(
       '#type'  => 'textfield', 
       '#title'  => t('API Version'), 
-      '#required' => TRUE, 
+      '#required' => TRUE,
+      '#description' => t('Specify which API version should be used to communicate with CloudSearch.  Leave as default if unsure.'), 
       '#default_value' => '2011-02-01', 
     );
     
@@ -146,7 +150,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
     }
     
    
-    $cloudsearch = AWSCloudSearchHelper::getAWSCloudSearchInstance_Manual($form_state['values']['options']['form']['aws_access_key'], $form_state['values']['options']['form']['aws_secret_key'], $form_state['values']['options']['form']['region']);
+    $cloudsearch = AWSCloudSearchHelper::getAWSCloudSearchInstance($form_state['values']['options']['form']['aws_access_key'], $form_state['values']['options']['form']['aws_secret_key'], $form_state['values']['options']['form']['region']);
     
     $new = empty($form_state['values']['options']['form']['create_new_domain']) ? FALSE : $form_state['values']['options']['form']['create_new_domain'];
     
@@ -199,7 +203,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
   
     if (empty($values['create_new_domain']) == FALSE && $values['create_new_domain'] == TRUE) {
       //CREATE NEW DOMAIN IN CLOUDSEARCH
-      $cloudsearch = AWSCloudSearchHelper::getAWSCloudSearchInstance_Manual($values['aws_access_key'], $values['aws_secret_key'], $values['region']);
+      $cloudsearch = AWSCloudSearchHelper::getAWSCloudSearchInstance($values['aws_access_key'], $values['aws_secret_key'], $values['region']);
       $response = $cloudsearch->create_domain($values['domain_name']);
       if (!$response->isOK()) {
         AWSCloudSearchHelper::checkAndReport(t('Create domain'), $response, TRUE);
@@ -289,29 +293,37 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
         $option_names[$key] = $element['#title'];
       }
     }
-    
-    $this->check_domain_loaded(true);
-
- 
+   
     $output .= '<dt><strong>' . t('CloudSearch status') . '</strong></dt>' . "\n";
-    
+    $output .= '<dd><em>' . t('The following information was retrieved directly from AWS CloudSearch system.') . '</em></dd>' . "\n";
     $csdomain = new AWSCloudSearchDomain($this->options, NULL);
-    $domain_details = get_object_vars($csdomain->get_domain_status());
+    $domain_status = $csdomain->get_domain_details();
 
-    $this->build_domain_details($domain_details, $domain_options);
-    foreach ($domain_options as $key => $value) {
-      $output .= '<dt>' . check_plain($key) . '</dt>' . "\n";
-      $output .= '<dd>' . nl2br(check_plain(print_r($value, TRUE))) . '</dd>' . "\n";  
+    //check domain was found
+    if ($domain_status == FALSE) {
+        $output .= '<dt class="error">' . t('Failed to retrieve domain details from AWS.') . '</dt>' . "\n";
+    }
+    else {
+      $domain_details = get_object_vars($domain_status);
+      $this->check_domain_loaded(true);
       
+      $this->build_domain_details($domain_details, $domain_options);
+      foreach ($domain_options as $key => $value) {
+        $output .= '<dt>' . check_plain($key) . '</dt>' . "\n";
+        $output .= '<dd>' . nl2br(check_plain(print_r($value, TRUE))) . '</dd>' . "\n";  
+        
+      }
     }
     
     $output .= '<dt><strong>' . t('Drupal settings') . '</strong></dt>' . "\n";
+    $output .= '<dd><em>' . t('Shows the drupal specific settings for this domain') . '</em></dd>' . "\n";
     
     foreach ($option_names as $key => $name) {
       $value = $this->options[$key];
       $output .= '<dt>' . check_plain($name) . '</dt>' . "\n";
+      //mask the access key
       if ($key == 'aws_access_key' || $key == 'aws_secret_key') {
-        $output .= '<dd>' . substr($value, 0, 6) . '****************** (' . t('Partially masked for security') . ") </dd>\n";
+        $output .= '<dd>' . substr($value, 0, 5) . '****************** (' . t('Partially masked for security') . ") </dd>\n";
       } 
       else {
         $output .= '<dd>' . nl2br(check_plain(print_r($value, TRUE))) . '</dd>' . "\n";  
@@ -321,13 +333,18 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
     return $output ? "<dl>\n$output</dl>" : '';
   }
 
-  public function build_domain_details($details, &$options) {
+  public function build_domain_details($details, &$options, $suffix = NULL) {
     foreach ($details as $key => $name) {
       if (is_object($name)) {
-        $this->build_domain_details(get_object_vars($details[$key]), $options);
+        $this->build_domain_details(get_object_vars($details[$key]), $options, $key);
       }
       else {
-        $options[$key] = $name;
+        if ($suffix != NULL) {
+          $options[$suffix . '  ' . $key] = $name;  
+        }
+        else {
+          $options[$key] = $name;
+        }
       }
     }
   }
@@ -358,7 +375,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
 
     $csdomain = new AWSCloudSearchDomain($this->options, $index->machine_name);
     
-    if (!$csdomain->is_active()) {
+    if (!$csdomain->is_active() && 1==2) {
       drupal_set_message(t('Domain currently not in a state to accept documents. This is likely to be because index fields have been updated and the domain is processing these changes which can take some time.'), 'warning');
       return array();  
     }
@@ -376,7 +393,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
   public function deleteItems($ids = 'all', SearchApiIndex $index = NULL) {
     $this->check_domain_loaded(true);
        
-    if ($ids == 'all' && $index == NULL) {
+    if ($ids == 'all') {
       $ids = array();
       drupal_set_message(t('SearchAPI CloudSearch does not currently support the removal of all documents.'), 'warning');
     }
@@ -421,7 +438,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
    */
   public function refresh_endpoints() {
    $csdomain = new AWSCloudSearchDomain($this->options, NULL);
-   $status = $csdomain->get_domain_status();
+   $status = $csdomain->get_domain_details();
   
    if (isset($status->SearchService->Endpoint) && isset($status->DocService->Endpoint)) {
       $ops = $this->options;
@@ -462,10 +479,13 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
   }
 
   /**
-   * Helper - Checks to see if AWS SDK for PHP is installed. 
+   * Helper - Checks to see if AWS SDK for PHP is present 
+   * 
+   * Can be present either in the PHP include (normally when using PEAR) or under the modules root director (/AWSSDKforPHP)
    */
   function aws_sdk_setup() {
-    
+      
+    //first check to see if it's been added under the modules root
     if (file_exists(drupal_get_path('module', 'search_api_amazon_cloudsearch') . '/AWSSDKforPHP/sdk.class.php')) {
       return TRUE;
     }

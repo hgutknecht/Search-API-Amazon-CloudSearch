@@ -5,7 +5,7 @@
  * Represents an Amazon CloudSearch Query.  
  * Takes a SeachAPI query and transforms into CloudSearch query.  It then submits this query to the 
  * CloudSearch search endpoint and tranforms the results into the Search API results structure.
- *  
+ * 
 */
 
 class AWSCloudSearchQuery {

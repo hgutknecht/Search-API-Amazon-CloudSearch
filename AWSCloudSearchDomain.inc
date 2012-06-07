@@ -23,6 +23,8 @@
  * 	   Field			Index
  *     Item				Document			
  * 
+ * This class makes use of the AWS SDK for PHP. For more information see @link http://aws.amazon.com/sdkforphp/ documentation @endlink   
+ * 
  */
    
 class AWSCloudSearchDomain {
@@ -36,18 +38,33 @@ class AWSCloudSearchDomain {
     $this->_domain_name = $options['domain_name'];
     $this->_index_machine_name = $index_machine_name;
     $this->_document_batch_action = str_replace('{API_VERSION}', $options['cloudsearch_api_version'], $this->_document_batch_action); 
-    $this->_cloud_search_instance = AWSCloudSearchHelper::getAWSCloudSearchInstance_Manual($options['aws_access_key'], $options['aws_secret_key'], $options['region']);
+    $this->_cloud_search_instance = AWSCloudSearchHelper::getAWSCloudSearchInstance($options['aws_access_key'], $options['aws_secret_key'], $options['region']);
     if (!empty($options['document_endpoint'])) {
       $this->_domain_doc_endpoint = $options['document_endpoint'];  
     }
   }
   
+  /**
+   * Get's the detail of the domain from AWS API
+   */
   public function get_domain_details() {
     $details =  $this->_cloud_search_instance->describe_domains(array(
         'DomainNames' => $this->_domain_name
     ));
-     
-    return $details;
+    
+    //check response and throw exception if AWS returned an error message
+    AWSCloudSearchHelper::checkAndReport('get_domain_details', $details, TRUE);
+    
+    //check response contains the domain requested, it may have been deleted outside of this module
+    if ($details->body->DescribeDomainsResult->DomainStatusList->member && $details->body->DescribeDomainsResult->DomainStatusList->member->DomainName == $this->_domain_name) {
+      return $details->body->DescribeDomainsResult->DomainStatusList->member;
+    }
+    else {
+      $msg = t('Could not find domain') . ' ' . $this->_domain_name . ' ' . t('in the CloudSearch account specified. Please check in the AWS Console and review the health of this domain.');
+      drupal_set_message(check_plain($msg), 'error');
+      watchdog('aws_cloudsearch', $msg, NULL, WATCHDOG_CRITICAL, $link = NULL);      
+      return FALSE;
+    }
   }
   
 
@@ -58,10 +75,10 @@ class AWSCloudSearchDomain {
    */
   public function is_active() {
     $details = $this->get_domain_details();
-    if ($details->body->DescribeDomainsResult->DomainStatusList->member->Processing == 'true') {
+    if ($details->Processing == 'true') {
       return FALSE;      
     }
-    elseif ($details->body->DescribeDomainsResult->DomainStatusList->member->RequiresIndexDocuments == 'true') {
+    elseif ($details->member->RequiresIndexDocuments == 'true') {
       return FALSE;  
     }
     else {
@@ -74,17 +91,17 @@ class AWSCloudSearchDomain {
     *
     * @return string
     *   A string representation of the Domains status.  Will be
-    *     - PROCESSING - Indexes have changed and are being processed
+    *    - PROCESSING - Indexes have changed and are being processed
     *    - REQUIRES INDEXING - Index have change but have not yet bene processed
     *    - ACTIVE - Domain is fully available
     */
    public function get_status() {
     $details = $this->get_domain_details();
-
-    if ($details->body->DescribeDomainsResult->DomainStatusList->member->Processing == 'true') {
+    
+    if ($details->Processing == 'true') {
       return 'PROCESSING';      
     }
-    elseif ($details->body->DescribeDomainsResult->DomainStatusList->member->RequiresIndexDocuments == 'true') {
+    elseif ($details->RequiresIndexDocuments == 'true') {
       return 'REQUIRES INDEXING';  
     }
     else {
@@ -92,18 +109,7 @@ class AWSCloudSearchDomain {
     }    
   }
   
-   /**
-    * Get's the raw status object (DomainStatusList) from CloudSearch.
-    *
-    * @return DomainStatusList
-    *	An object that holds the Domains status properties  
-    *   
-    */
-  public function get_domain_status() {
-    return  $this->get_domain_details()->body->DescribeDomainsResult->DomainStatusList->member;  
-  }
-  
-  
+ 
   
    /**
     * Adds an Index into CloudSearch.
@@ -125,13 +131,13 @@ class AWSCloudSearchDomain {
     *    Is this field available to show in the results returned by CloudSearch 
     *
     * @param string $searchable
-    *	Is this field searchable (text searchable)   
+    *	   Is this field searchable (text searchable)   
     *
     * @param string $source_field
     *   Used if this index should copy it's value from an existing index
     *  
     * @return boolean
-    *	If the add index request worked.  
+    *	  If the add index request worked.  
     *   
     */
   private function add_index($index_field, $index_type, $facet, $result, $searchable, $source_field = NULL) {
@@ -150,20 +156,23 @@ class AWSCloudSearchDomain {
                                        'ResultEnabled' => $result==TRUE ? "true" : "false", );
         break;
       case "uint":
-       break;
+       //here for completeness but we leave uint with it's default options 
+        break;
       case "literal":
        $options['LiteralOptions'] = array('FacetEnabled' => $facet==TRUE ? "true" : "false", 
-                                       'ResultEnabled' => $result==TRUE ? "true" : "false", 
-                                       'SearchEnabled' => $searchable==TRUE ? "true" : "false");      
-       break;                 
+                                          'ResultEnabled' => $result==TRUE ? "true" : "false", 
+                                          'SearchEnabled' => $searchable==TRUE ? "true" : "false");      
+        break;                 
       default:
         break;
     }
     
-    if ($source_field!=NULL) {
+    //if source field specified then we effectively tell AWS to get's it's value from the field specificed in $source_field
+    if ($source_field != NULL) {
       $options['SourceAttributes'] = array(array('SourceDataFunction' => 'Copy', 'SourceDataCopy' => array('SourceName' => $source_field)));
     }
     
+    //call AWS
     $response = $this->_cloud_search_instance->define_index_field($this->_domain_name, $options);
     
     return AWSCloudSearchHelper::checkAndReport(t('Add index'), $response, TRUE);
@@ -411,7 +420,7 @@ class AWSCloudSearchDomain {
          'type' => 'add', 
          'id' => self::createId($this->_index_machine_name, $key), 
          'version' => time(), 
-         'lang' => 'en', //do something better  
+         'lang' => 'en', 
          'fields' => $values, 
       ); 
       
@@ -459,7 +468,7 @@ class AWSCloudSearchDomain {
    */
   public function add_ip_access_policy($ip_address) {
     $ip_address = $ip_address . "/32";
-    $details = $this->get_domain_status();
+    $details = $this->get_domain_details();
     $search_arn = (string)$details->SearchService->Arn;
     $doc_arn = (string)$details->DocService->Arn;
    
@@ -487,7 +496,7 @@ class AWSCloudSearchDomain {
    */  
   private function submit_json_request($json) {
     $ch = curl_init(); 
-    curl_setopt($ch, CURLOPT_URL, 'http://' . $this->_domain_doc_endpoint . $this->_document_batch_action);//need endpoint action configured in settings
+    curl_setopt($ch, CURLOPT_URL, 'http://' . $this->_domain_doc_endpoint . $this->_document_batch_action);
     curl_setopt($ch, CURLOPT_HEADER, 0); 
     curl_setopt($ch, CURLOPT_HTTPHEADER, array("Content-Type:application/json")); 
     curl_setopt($ch, CURLOPT_NOBODY, 1); 
