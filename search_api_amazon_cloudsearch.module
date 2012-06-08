@@ -1,6 +1,12 @@
 <?php
 
 /**
+ * @file
+ * search_api_amazon_cloudsearch.module
+ */
+
+
+/**
  * Implements hook_search_api_service_info().
  */
 function search_api_amazon_cloudsearch_search_api_service_info() {
@@ -11,4 +17,3 @@ function search_api_amazon_cloudsearch_search_api_service_info() {
   );
   return $services;
 }
-
