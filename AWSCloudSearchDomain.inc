@@ -326,7 +326,7 @@ class AWSCloudSearchDomain {
 
   /**
    * Helper function that determines if the CS index has changed.
-   * 
+   *
    * Compares it to SearchAPI field.
    */
   public function checkFieldChanged($name, $field, $cs_fields) {

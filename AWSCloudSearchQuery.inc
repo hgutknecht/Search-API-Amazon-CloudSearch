@@ -23,7 +23,7 @@ class AWSCloudSearchQuery {
 
   /**
    * Builds and submits the search query to CloudSearch.
-   * 
+   *
    * Sets up Facets and returns the Ids.
    */
   public function execute(SearchApiQueryInterface $search_api_query) {
