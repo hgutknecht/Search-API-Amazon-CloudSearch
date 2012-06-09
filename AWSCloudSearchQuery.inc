@@ -15,15 +15,16 @@ class AWSCloudSearchQuery {
   protected $query;
 
   /**
-   * Constructor
+   * Constructor.
    */
   public function __construct($ops) {
     $this->options = $ops;
   }
 
   /**
-   * Builds and submits the search query to CloudSearch,
-   * sets up Facets and returns the Ids.
+   * Builds and submits the search query to CloudSearch.
+   * 
+   * Sets up Facets and returns the Ids.
    */
   public function execute(SearchApiQueryInterface $search_api_query) {
     $query_options = $search_api_query->GetOptions();
@@ -152,9 +153,9 @@ class AWSCloudSearchQuery {
 
   /**
    * Helper - creates a CloudSearch filter (bq) string.
-   * 
-   * Given SearchAPI filter object. CloudSearch queries 
-   * use parentheses to group searches and the conjunction 
+   *
+   * Given SearchAPI filter object. CloudSearch queries
+   * use parentheses to group searches and the conjunction
    * is put at the start of each group
    *
    * Example:  (AND field_1 field_2 (OR field_3 field 4))
@@ -180,7 +181,7 @@ class AWSCloudSearchQuery {
 
   /**
    * Helper method for getting the filter field ready for AWS.
-   * 
+   *
    * This is need to ensure uint values are not wrapped in quotes
    * otherwise AWS will fail
    */
@@ -196,7 +197,7 @@ class AWSCloudSearchQuery {
 
   /**
    * Helper method for removing unnecessary nested expressions from keys.
-   * 
+   *
    * Note: Taken from search_api_db.
    */
   protected function prepareKeys($keys) {
@@ -239,7 +240,7 @@ class AWSCloudSearchQuery {
 
   /**
    * Helper method for splitting keys.
-   * 
+   *
    * Note: Taken from search_api_db
    */
   protected function splitKeys($keys) {
@@ -266,7 +267,7 @@ class AWSCloudSearchQuery {
 
   /**
    * Helper method for eliminating duplicates from the search keys.
-   * 
+   *
    * Note: Taken from search_api_db
    */
   protected function eliminateDuplicates($keys, &$words = array()) {

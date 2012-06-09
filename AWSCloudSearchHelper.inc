@@ -14,7 +14,7 @@ class AWSCloudSearchHelper {
 
   /**
    * Creates an instance of the AmazonCloudSearch class.
-   * 
+   *
    * Given security credentials and AWS region.
    */
   public static function getAWSCloudSearchInstance($key, $secret, $region) {
@@ -41,7 +41,7 @@ class AWSCloudSearchHelper {
 
   /**
    * Gets all applicable regions for AWS EC2 instances.
-   * 
+   *
    * At present this is the only way
    * to get a list of regions via the API.
    */

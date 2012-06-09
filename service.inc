@@ -9,7 +9,7 @@
 class SearchApiCloudSearchService extends SearchApiAbstractService {
 
   /**
-   * Returns CloudSearch specific settings to the Search API add/edit form
+   * Returns CloudSearch specific settings to the Search API add/edit form.
    */
   public function configurationForm(array $form, array &$form_state) {
 
@@ -101,7 +101,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
 
   /**
    * Helpder - Get servers external IP Address.
-   * 
+   *
    * Rough and ready way of getting the external ip address of this server.
    */
   public function getExternalIPAddress() {
@@ -241,7 +241,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
   }
 
   /**
-   * Helper - returns true if valid IP address
+   * Helper - returns true if valid IP address.
    */
   public function validIP($ip) {
     if (preg_match("^([1-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])(\.([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])){3}^", $ip)) {
@@ -253,8 +253,8 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
   }
 
   /**
-   * Determines whether this service class supports a given feature. 
-   * 
+   * Determines whether this service class supports a given feature.
+   *
    * Features are optional extensions to Search API functionality and
    * usually defined and used by third-party modules.
    *
@@ -278,8 +278,8 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
   }
 
   /**
-   * View this server's settings. 
-   * 
+   * View this server's settings.
+   *
    * Output can be HTML or a render array, a <dl>
    * listing all relevant settings is preferred.
    *
@@ -370,7 +370,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
   }
 
   /**
-   * Updates fields/indexes in CloudSearch
+   * Updates fields/indexes in CloudSearch.
    */
   public function fieldsUpdated(SearchApiIndex $index) {
     $this->checkDomainLoaded(TRUE);
@@ -380,7 +380,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
   }
 
   /**
-   * Adds entities into CloudSearch given the index and items array 
+   * Adds entities into CloudSearch given the index and items array.
    */
   public function indexItems(SearchApiIndex $index, array $items) {
     $this->checkDomainLoaded(TRUE);
@@ -475,8 +475,8 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
 
   /**
    * Helper - checks to see if the endpoint options are set.
-   * 
-   * If not it will go to CloudSearch and check to see if the endpoints are 
+   *
+   * If not it will go to CloudSearch and check to see if the endpoints are
    * now configured. If they are it will update options.  If not it will
    * ensure this server is disabled and report.
    */
@@ -500,7 +500,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
   }
 
   /**
-   * Helper - Checks to see if AWS SDK for PHP is present
+   * Helper - Checks to see if AWS SDK for PHP is present.
    *
    * Can be present either in the PHP include (normally when using PEAR)
    * or under the modules root director (/AWSSDKforPHP).

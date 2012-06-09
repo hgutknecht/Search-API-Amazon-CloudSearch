@@ -96,16 +96,16 @@ class AWSCloudSearchDomain {
   }
 
   /**
-    * Gets the status of the Domain.
-    *
-    * Based on the various status fields for that Domain.
-    *
-    * @return string
-    *   A string representation of the Domains status.  Will be
-    *    - PROCESSING - Indexes have changed and are being processed
-    *    - REQUIRES INDEXING - Index have change but have not yet bene processed
-    *    - ACTIVE - Domain is fully available
-    */
+   * Gets the status of the Domain.
+   *
+   * Based on the various status fields for that Domain.
+   *
+   * @return string
+   *   A string representation of the Domains status.  Will be
+   *    - PROCESSING - Indexes have changed and are being processed
+   *    - REQUIRES INDEXING - Index have change but have not yet bene processed
+   *    - ACTIVE - Domain is fully available
+   */
   public function getStatus() {
     $details = $this->getDomainDetails();
 
@@ -325,8 +325,9 @@ class AWSCloudSearchDomain {
   }
 
   /**
-   * Helper function that determines if the field within
-   * Search API now differs from the CloudSearch Index
+   * Helper function that determines if the CS index has changed.
+   * 
+   * Compares it to SearchAPI field.
    */
   public function checkFieldChanged($name, $field, $cs_fields) {
     foreach ($cs_fields as $index) {
@@ -363,7 +364,7 @@ class AWSCloudSearchDomain {
   }
 
   /**
-   * Helper - Converts a SearchAPI field into AWS index
+   * Helper - Converts a SearchAPI field into AWS index.
    *
    * Takes the Search API field type and converts to AWS Index
    * type including index options.
@@ -459,7 +460,7 @@ class AWSCloudSearchDomain {
             }
           }
           else {
-             $values[$name] = $value['value'];
+            $values[$name] = $value['value'];
           }
         }
       }
