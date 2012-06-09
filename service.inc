@@ -9,8 +9,7 @@
 class SearchApiCloudSearchService extends SearchApiAbstractService {
 
   /**
-   * Returns CloudSearch specific settings to the Search
-   * API add/edit server form.
+   * Returns CloudSearch specific settings to the Search API add/edit form
    */
   public function configurationForm(array $form, array &$form_state) {
 
@@ -22,7 +21,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
     $form['intro'] = array(
       '#type' => 'markup',
       '#markup' => '<p>' . t("Either link an existing CloudSearch domain or create a new one.  Start by entering you AWS account's credentials which can be found by going to the security area of the") . ' ' . l(t('AWS portal site.'), 'https://aws-portal.amazon.com/gp/aws/securityCredentials', array('attributes' => array('target' => '_blank'))) .
-      t("<em>If you create a new domain Amazon will start charging your account as soon as it has loaded.  It's strongly recommended you check you AWS console after the domain is created to ensure it is setup to your satisfaction. ") . l(t('Amazon CloudSearch Pricing'), 'http://aws.amazon.com/cloudsearch/pricing/', array('attributes' => array('target' => '_blank'))) . '</em></p>',
+      t("<em>If you create a new domain Amazon will start charging your account as soon as it has loaded.  It's strongly recommended you check you AWS console after the domain is created to ensure it is setup to your satisfaction.") . l(t('Amazon CloudSearch Pricing'), 'http://aws.amazon.com/cloudsearch/pricing/', array('attributes' => array('target' => '_blank'))) . '</em></p>',
     );
 
     $form['aws_access_key'] = array(
@@ -101,10 +100,11 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
   }
 
   /**
-   * Helpder - Get servers external IP Address
+   * Helpder - Get servers external IP Address.
+   * 
    * Rough and ready way of getting the external ip address of this server.
    */
-  function getExternalIPAddress() {
+  public function getExternalIPAddress() {
     $ch = curl_init("http://icanhazip.com/");
     curl_setopt($ch, CURLOPT_HEADER, FALSE);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
@@ -135,7 +135,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
 
     // Check domain.
     preg_match("/[a-z][a-z0-9-]+/", $domain_name, $domain_match);
-    if (strlen($domain_name) < 3) {
+    if (drupal_strlen($domain_name) < 3) {
       form_error($form['domain_name'], t('Domain name must be between 3 and 28 characters.'));
       return;
     }
@@ -144,7 +144,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
       return;
     }
 
-    if (!empty($values['access_ip']) && strlen($values['access_ip']) > 0 && $this->validIP($values['access_ip']) == FALSE) {
+    if (!empty($values['access_ip']) && drupal_strlen($values['access_ip']) > 0 && $this->validIP($values['access_ip']) == FALSE) {
       form_error($form['access_ip'], t('The IP address was not valid, please check and try again.'));
       return;
     }
@@ -177,7 +177,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
      */
     if ($new == FALSE) {
       if (count($response->body->DescribeDomainsResult->DomainStatusList->member) == 0) {
-         form_error($form['domain_name'], t('Search domain not found, please check your details and try again.  If you want to create a new domain then tick the Create new domain checkbox.'));
+        form_error($form['domain_name'], t('Search domain not found, please check your details and try again.  If you want to create a new domain then tick the Create new domain checkbox.'));
       }
       else {
         $form_state['storage']['search_endpoint'] = (string) $response->body->DescribeDomainsResult->DomainStatusList->member->SearchService->Endpoint;
@@ -234,7 +234,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
     }
     $this->options = $values;
 
-    if (!empty($values['access_ip']) && strlen($values['access_ip']) > 0) {
+    if (!empty($values['access_ip']) && drupal_strlen($values['access_ip']) > 0) {
       $csdomain = new AWSCloudSearchDomain($values, NULL);
       $csdomain->addIPAccessPolicy($values['access_ip']);
     }
@@ -243,7 +243,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
   /**
    * Helper - returns true if valid IP address
    */
-  function validIP($ip) {
+  public function validIP($ip) {
     if (preg_match("^([1-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])(\.([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])){3}^", $ip)) {
       return TRUE;
     }
@@ -253,8 +253,9 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
   }
 
   /**
-   * Determines whether this service class implementation supports a given
-   * feature. Features are optional extensions to Search API functionality and
+   * Determines whether this service class supports a given feature. 
+   * 
+   * Features are optional extensions to Search API functionality and
    * usually defined and used by third-party modules.
    *
    * There are currently three features defined directly in the Search API
@@ -277,7 +278,9 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
   }
 
   /**
-   * View this server's settings. Output can be HTML or a render array, a <dl>
+   * View this server's settings. 
+   * 
+   * Output can be HTML or a render array, a <dl>
    * listing all relevant settings is preferred.
    *
    * The default implementation does a crude output as a definition list, with
@@ -301,7 +304,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
 
     // Check domain was found.
     if ($domain_status == FALSE) {
-        $output .= '<dt class="error">' . t('Failed to retrieve domain details from AWS.') . '</dt>' . "\n";
+      $output .= '<dt class="error">' . t('Failed to retrieve domain details from AWS.') . '</dt>' . "\n";
     }
     else {
       $domain_details = get_object_vars($domain_status);
@@ -323,7 +326,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
       $output .= '<dt>' . check_plain($name) . '</dt>' . "\n";
       // Mask the access key.
       if ($key == 'aws_access_key' || $key == 'aws_secret_key') {
-        $output .= '<dd>' . substr($value, 0, 5) . '****************** (' . t('Partially masked for security') . ") </dd>\n";
+        $output .= '<dd>' . drupal_substr($value, 0, 5) . '****************** (' . t('Partially masked for security') . ") </dd>\n";
       }
       else {
         $output .= '<dd>' . nl2br(check_plain(print_r($value, TRUE))) . '</dd>' . "\n";
@@ -334,8 +337,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
   }
 
   /**
-   * Helper - Creates a single flat array out of a CloudSearch domain
-   * details object.
+   * Helper - Creates a single flat array out of a CloudSearch domain details.
    */
   public function buildDomainDetails($details, &$options, $suffix = NULL) {
     foreach ($details as $key => $name) {
@@ -378,8 +380,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
   }
 
   /**
-   * Adds entities into CloudSearch given the index and array
-   * of items to add
+   * Adds entities into CloudSearch given the index and items array 
    */
   public function indexItems(SearchApiIndex $index, array $items) {
     $this->checkDomainLoaded(TRUE);
@@ -473,9 +474,10 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
   }
 
   /**
-   * Helper - checks to see if the endpoint options are set, if not it
-   * will go to CloudSearch and check to see if the endpoints are now
-   * configured. If they are it will update options.  If not it will
+   * Helper - checks to see if the endpoint options are set.
+   * 
+   * If not it will go to CloudSearch and check to see if the endpoints are 
+   * now configured. If they are it will update options.  If not it will
    * ensure this server is disabled and report.
    */
   public function checkDomainLoaded($refresh = FALSE) {
@@ -503,7 +505,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
    * Can be present either in the PHP include (normally when using PEAR)
    * or under the modules root director (/AWSSDKforPHP).
    */
-  function isAwsSdkSetup() {
+  public function isAwsSdkSetup() {
 
     // First check to see if it's been added under the modules root.
     if (file_exists(drupal_get_path('module', 'search_api_amazon_cloudsearch') . '/AWSSDKforPHP/sdk.class.php')) {

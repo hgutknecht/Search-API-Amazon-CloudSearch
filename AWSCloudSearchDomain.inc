@@ -35,7 +35,7 @@ class AWSCloudSearchDomain {
   protected $indexMachineName;
 
   /**
-   * Constructor
+   * Constructor.
    */
   public function __construct($options, $index_machine_name) {
     $this->domainName = $options['domain_name'];
@@ -48,7 +48,7 @@ class AWSCloudSearchDomain {
   }
 
   /**
-   * Get's the detail of the domain from AWS API
+   * Get's the detail of the domain from AWS API.
    */
   public function getDomainDetails() {
     $details = $this->cloudSearchInstance->describe_domains(array(
@@ -75,8 +75,10 @@ class AWSCloudSearchDomain {
 
 
   /**
+   * Checks to see if the domain is currently active.
+   *
    * Looks at all the various status fields for this Domain and returns
-   * if it's in an active state.   * This is an important check before
+   * if it's in an active state. This is an important check before
    * uploading documents to the domain as they won't get uploading
    * if it's not active.
    */
@@ -93,9 +95,10 @@ class AWSCloudSearchDomain {
     }
   }
 
-   /**
-    * Gets the status of the Domain based on the various status fields
-    * for that Domain.
+  /**
+    * Gets the status of the Domain.
+    *
+    * Based on the various status fields for that Domain.
     *
     * @return string
     *   A string representation of the Domains status.  Will be
@@ -220,6 +223,7 @@ class AWSCloudSearchDomain {
 
   /**
    * Kicks off an Index Documents request within CloudSearch.
+   *
    * This will process any modification to the index.
    *
    * @return boolean
@@ -232,7 +236,7 @@ class AWSCloudSearchDomain {
 
 
   /**
-   *  Updates any modified CloudSearch indexes given the provided index
+   *  Updates any modified CloudSearch indexes given the provided index.
    *
    * @param SearchApiIndex $index
    *   The index to update
@@ -359,8 +363,11 @@ class AWSCloudSearchDomain {
   }
 
   /**
-   * Helper - Takes the Search API field type and
-   * converts to AWS Index type including index options.
+   * Helper - Converts a SearchAPI field into AWS index
+   *
+   * Takes the Search API field type and converts to AWS Index
+   * type including index options.
+   *
    * Dev Note: This may be a bit too primative, possibly
    * look at alternative ways to identify the index options.
    */
@@ -437,9 +444,9 @@ class AWSCloudSearchDomain {
         if ($value['value'] != NULL) {
           if ($value['type'] == 'tokens') {
 
-             /* CloudSearch doesn't support tokens like this so
-              * just combine it back into a string.
-              */
+            /* CloudSearch doesn't support tokens like this so
+             * just combine it back into a string.
+             */
             $combined = '';
             foreach ($value['value'] as $token) {
               $combined .= $token['value'] . ' ';
@@ -473,7 +480,8 @@ class AWSCloudSearchDomain {
 
 
   /**
-   *  Removes documents from CloudSearch
+   *  Removes documents from CloudSearch.
+   *
    *  Converts ids into JSON SDF document and sends to Cloudsearch endpoint.
    *
    * @param array $ids
@@ -524,8 +532,7 @@ class AWSCloudSearchDomain {
   }
 
   /**
-   * Helper - takes the JSON SDF document and sends to
-   * the CloudSearch document endpoint.
+   * Helper - Submits SDF Json document(s) to document endpoint.
    */
   protected function submitJsonRequest($json) {
     $ch = curl_init();
@@ -543,24 +550,27 @@ class AWSCloudSearchDomain {
   }
 
   /**
-   * Helper - Encodes a field name so that it's clearly
-   * identifiable in CloudSearch and seperated from other indexes.
+   * Helper - Encodes a search API field name.
+   *
+   * Makes field clearly identifiable in CloudSearch and seperated
+   * from other indexes.
    */
   public static function encodeIndexName($index_name, $field_name) {
     return $index_name . '_' . str_replace(':', '____', $field_name);
   }
 
   /**
-   * Helper - Decodes a CloudSearch index back
-   * into the Search API field name.
+   * Helper - Decodes a CloudSearch index.
    */
   public static function decodeIndexName($index_name, $field_name) {
     return str_replace('____', ':', str_replace($index_name . '_', '', $field_name));
   }
 
   /**
-   * Helper - Create the id for the document/item so that it's specific
-   * to an index does this by simply combining the Index id and item id.
+   * Helper - Create the id for the document/item.
+   *
+   * Makes it specific to an index by simply
+   * combining the Index id and item id.
    */
   protected static function createId($index_id, $item_id) {
     return $index_id . '_' . $item_id;

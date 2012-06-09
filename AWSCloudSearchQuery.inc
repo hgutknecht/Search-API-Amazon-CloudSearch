@@ -60,7 +60,7 @@ class AWSCloudSearchQuery {
     $facets = array();
     if ($search_api_query->getOption('search_api_facets')) {
       foreach ($search_api_query->getOption('search_api_facets') as $key => $facet) {
-         $facets[] = AWSCloudSearchDomain::encodeIndexName($this->indexMachineName, $key);
+        $facets[] = AWSCloudSearchDomain::encodeIndexName($this->indexMachineName, $key);
       }
       $f = "facet=";
       foreach ($facets as $facet) {
@@ -87,8 +87,8 @@ class AWSCloudSearchQuery {
     if ($sort) {
       $r = '&rank=';
       foreach ($sort as $field_name => $order) {
-          $r .= $order == 'DESC' ? '-' : '';
-          $r .= AWSCloudSearchDomain::encodeIndexName($this->indexMachineName, 'sort_' . $field_name) . ',';
+        $r .= $order == 'DESC' ? '-' : '';
+        $r .= AWSCloudSearchDomain::encodeIndexName($this->indexMachineName, 'sort_' . $field_name) . ',';
       }
       if ($field_name == 'search_api_relevance') {
         $r .= $order == 'DESC' ? '-text_relevance,' : 'text_relevance,';
@@ -107,9 +107,9 @@ class AWSCloudSearchQuery {
 
     // Check response and report if in error.
     if ($response == NULL) {
-        drupal_set_message(check_plain(t('Critial failure when calling CloudSearch')), 'error');
-        watchdog('aws_cloudsearch', 'Critial failure when calling CloudSearch. Request was: %query_string', array('%query_string' => $query_params), WATCHDOG_CRITICAL, $link = NULL);
-        return array();
+      drupal_set_message(check_plain(t('Critial failure when calling CloudSearch')), 'error');
+      watchdog('aws_cloudsearch', 'Critial failure when calling CloudSearch. Request was: %query_string', array('%query_string' => $query_params), WATCHDOG_CRITICAL, $link = NULL);
+      return array();
     }
     elseif (isset($response->error)) {
       drupal_set_message(check_plain(t('CloudSearch returned an error:') . $response->messages[0]->message), 'error');
@@ -151,16 +151,16 @@ class AWSCloudSearchQuery {
   }
 
   /**
-   * Helper - creates a CloudSearch filter (bq) string given
-   * SearchAPI filter object
-   *
-   * CloudSearch queries use parentheses to group searches and the
-   * conjunction is put at the start of each group
+   * Helper - creates a CloudSearch filter (bq) string.
+   * 
+   * Given SearchAPI filter object. CloudSearch queries 
+   * use parentheses to group searches and the conjunction 
+   * is put at the start of each group
    *
    * Example:  (AND field_1 field_2 (OR field_3 field 4))
    */
   protected function createFilterCondition(SearchApiQueryFilterInterface $filter, $depth, &$bq = '') {
-    $bq .= '(' . strtolower($filter->GetConjunction()) . ' ';
+    $bq .= '(' . drupal_strtolower($filter->GetConjunction()) . ' ';
     foreach ($filter->getFilters() as $f) {
       if (is_array($f)) {
         $val = $this->getFinalFieldFilterValue($f);
@@ -180,6 +180,7 @@ class AWSCloudSearchQuery {
 
   /**
    * Helper method for getting the filter field ready for AWS.
+   * 
    * This is need to ensure uint values are not wrapped in quotes
    * otherwise AWS will fail
    */
@@ -195,6 +196,7 @@ class AWSCloudSearchQuery {
 
   /**
    * Helper method for removing unnecessary nested expressions from keys.
+   * 
    * Note: Taken from search_api_db.
    */
   protected function prepareKeys($keys) {
@@ -237,6 +239,7 @@ class AWSCloudSearchQuery {
 
   /**
    * Helper method for splitting keys.
+   * 
    * Note: Taken from search_api_db
    */
   protected function splitKeys($keys) {
@@ -263,7 +266,8 @@ class AWSCloudSearchQuery {
 
   /**
    * Helper method for eliminating duplicates from the search keys.
-   *  Note: Taken from search_api_db
+   * 
+   * Note: Taken from search_api_db
    */
   protected function eliminateDuplicates($keys, &$words = array()) {
     foreach ($keys as $i => $word) {

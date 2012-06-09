@@ -13,8 +13,9 @@ require_once 'AWSSDKforPHP/services/cloudsearch.class.php';
 class AWSCloudSearchHelper {
 
   /**
-   * Creates an instance of the AmazonCloudSearch class
-   * given security credentials and AWS region.
+   * Creates an instance of the AmazonCloudSearch class.
+   * 
+   * Given security credentials and AWS region.
    */
   public static function getAWSCloudSearchInstance($key, $secret, $region) {
     $search = new AmazonCloudSearch(self::buildAWSCredentials($key, $secret));
@@ -24,7 +25,7 @@ class AWSCloudSearchHelper {
 
 
   /**
-   * Builds the credential array required by the AWS API
+   * Builds the credential array required by the AWS API.
    *
    * @todo Possibly look at softening the default_cache_config setting
    */
@@ -40,6 +41,7 @@ class AWSCloudSearchHelper {
 
   /**
    * Gets all applicable regions for AWS EC2 instances.
+   * 
    * At present this is the only way
    * to get a list of regions via the API.
    */
@@ -54,8 +56,7 @@ class AWSCloudSearchHelper {
   }
 
   /**
-   * Given a response from the AWS API will check if
-   * it has an error message and returns it.
+   * Extracts error message from AWS response object.
    */
   public static function getAWSError($response) {
     if (!isset($response->body->Error->Message)) {
@@ -67,8 +68,7 @@ class AWSCloudSearchHelper {
   }
 
   /**
-   * Check the CloudSearch response and log any errors,
-   * returning true if OK and false if error
+   * Check response and report if it contains an error.
    */
   public static function checkAndReport($context, $response, $throw_exception = FALSE) {
     if (!$response->isOK()) {
