@@ -347,9 +347,9 @@ class AWSCloudSearchDomain {
   /**
    * Helper. Determines if string starts with given string.
    */
-  function startsWith($haystack, $needle) {
-      $length = strlen($needle);
-      return (substr($haystack, 0, $length) === $needle);
+  protected function startsWith($haystack, $needle) {
+    $length = drupal_strlen($needle);
+    return (drupal_substr($haystack, 0, $length) === $needle);
   }
 
   /**
@@ -406,7 +406,7 @@ class AWSCloudSearchDomain {
   }
 
   /**
-   * Converts a SearchAPI field into a CloudSearch index
+   * Converts a SearchAPI field into a CloudSearch index.
    *
    * Due to the restrictions of CloudSearch fields additional fields
    * may need to be created to satisfy certain feaures.
@@ -512,8 +512,7 @@ class AWSCloudSearchDomain {
   }
 
   /**
-   * Helper - Checks the field name against the FacetAPI table given
-   * the index machine name
+   * Helper - Checks the field name against the FacetAPI table.
    */
   protected function isFieldFacet($field_name) {
     $result = db_query('SELECT facet FROM facetapi WHERE searcher = :searcher AND enabled = 1 AND facet = :field_name', array(

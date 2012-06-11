@@ -4,7 +4,6 @@ dependencies[] = search_api
 package = Search
 core = 7.x
 
-files[] = search_api_amazon_cloudsearch.admin.inc
 files[] = service.inc
 files[] = AWSCloudSearchHelper.inc
 files[] = AWSCloudSearchDomain.inc

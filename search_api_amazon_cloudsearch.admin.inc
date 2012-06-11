@@ -6,7 +6,7 @@
  */
 
 /**
- * Form constructor to CloudSearch specific settings
+ * Form constructor to CloudSearch specific settings.
  *
  * This form allows the user to specify which fields they would like to
  * be sortable and available for ranged queryies (<=, >= etc).
