@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Represents an Amazon CloudSearch Query.
+ * Encapsulates the logic required to perform an Amazon CloudSearch Query.
  * Takes a SeachAPI query and transforms into CloudSearch query.
  * It then submits this query to the CloudSearch search endpoint
  * and tranforms the results into the Search API results structure.
@@ -13,7 +13,7 @@ class AWSCloudSearchQuery {
   protected $options;
   protected $indexMachineName;
   protected $query;
-
+  protected $serverFieldOptions;
   /**
    * Constructor.
    */
@@ -30,6 +30,10 @@ class AWSCloudSearchQuery {
     $query_options = $search_api_query->GetOptions();
     $this->indexMachineName = $search_api_query->getIndex()->machine_name;
     $this->query = $search_api_query;
+
+    // Get the CloudSearch server specific field options for this index.
+    $this->serverFieldOptions = $this->query->getIndex()->server()->options['index_options'][$this->indexMachineName]['fields'];
+
     /* Construct the CloudSearch querystring
     * Params are:
     *   q             - general keyword search, searches all searchable fields
@@ -59,6 +63,7 @@ class AWSCloudSearchQuery {
 
     // Add facets (if applicable).
     $facets = array();
+    $f = '';
     if ($search_api_query->getOption('search_api_facets')) {
       foreach ($search_api_query->getOption('search_api_facets') as $key => $facet) {
         $facets[] = AWSCloudSearchDomain::encodeIndexName($this->indexMachineName, $key);
@@ -73,12 +78,12 @@ class AWSCloudSearchQuery {
     /* Active filters (BQ).  These filters will come from the
      * facets or from the View filters.
      */
-    $bq = "";
+    $bq = "bq=(and search_api_document_index_machine_name:'$this->indexMachineName' ";
     $filters = $search_api_query->getFilter();
     if (count($filters->getFilters()) > 0) {
       $this->createFilterCondition($filters, 0, $bq);
-      $bq = 'bq=' . $bq;
     }
+    $bq .= ' ) ';
 
     /* Sort.  If no sort specified CloudSearch will default to
      * text-relevance field.
@@ -166,8 +171,45 @@ class AWSCloudSearchQuery {
       if (is_array($f)) {
         $val = $this->getFinalFieldFilterValue($f);
         $fname = AWSCloudSearchDomain::encodeIndexName($this->indexMachineName, $f[0]);
-        // Trailing space required.
-        $bq .= "{$fname}:{$val} ";
+        // Setup condition based on operand.
+        switch ($f[2]) {
+          case "=":
+            $bq .= " {$fname}:{$val} ";
+            break;
+
+          case "<>":
+            $bq .= " (not {$fname}:{$val}) ";
+            break;
+
+          case ">=":
+            $fname = $this->getSortFieldName($fname);
+            $bq .= " {$fname}:{$f[1]}.. ";
+            break;
+
+          case "<=":
+            $fname = $this->getSortFieldName($fname);
+            $bq .= " {$fname}:0..{$f[1]} ";
+            break;
+
+          case ">":
+            /* CloudSearch range filters are always inclusive so change value
+             * to compensate.
+             */
+            $fname = $this->getSortFieldName($fname);
+            $val = $f[1] + 1;
+            $bq .= " {$fname}:{$val}.. ";
+            break;
+
+          case "<":
+            /* CloudSearch range filters are always inclusive so change value
+             * to compensate.
+             */
+            $fname = $this->getSortFieldName($fname);
+            $val = $f[1] > 0 ? $f[1] - 1 : 0;
+            $bq .= " {$fname}:0..{$val} ";
+            break;
+
+        }
       }
     }
     foreach ($filter->getFilters() as $f) {
@@ -186,13 +228,21 @@ class AWSCloudSearchQuery {
    * otherwise AWS will fail
    */
   protected function getFinalFieldFilterValue($field) {
-    $type = $this->query->getIndex()->options['fields'][$field[0]]['type'];
-    if ($type == 'integer') {
-      return $field[1];
+    switch ($this->serverFieldOptions[$field[0]]['index_type']) {
+      case 'literal':
+        return "'$field[1]'";
+      case 'text':
+        return "'$field[1]'";
+      case 'uint':
+        return $field[1];
     }
-    else {
-      return "'$field[1]'";
-    }
+  }
+
+  /**
+   * Converts a normal encoded field name into it's sort field.
+   */
+  protected function getSortFieldName($field_name) {
+    return str_replace($this->indexMachineName, $this->indexMachineName . '_sort', $field_name);
   }
 
   /**

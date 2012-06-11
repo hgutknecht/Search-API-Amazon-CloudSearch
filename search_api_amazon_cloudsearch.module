@@ -17,3 +17,42 @@ function search_api_amazon_cloudsearch_search_api_service_info() {
   );
   return $services;
 }
+
+/**
+ * Implements hook_menu().
+ */
+function search_api_amazon_cloudsearch_menu() {
+  $items['admin/config/search/search_api/index/%search_api_index/aws_cloudsearch'] = array(
+    'title' => 'CloudSearch',
+    'description' => 'Additional configuration for CloudSearch indexes',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('search_api_amazon_cloudsearch_index_setup', 5),
+    'access callback' => 'search_api_amazon_cloudsearch_menu_access',
+    'access arguments' => array(5),
+    'weight' => -1,
+    'type' => MENU_LOCAL_TASK,
+    'context' => MENU_CONTEXT_INLINE | MENU_CONTEXT_PAGE,
+    'file' => 'search_api_amazon_cloudsearch.admin.inc',
+  );
+
+  return $items;
+}
+
+/**
+ * Access callback for cloudsearch settings form.
+ *
+ * Only shows this tab if the given index has a CloudSearch
+ * server selected.
+ */
+function search_api_amazon_cloudsearch_menu_access($index) {
+  $server = $index->server();
+
+  // Check to make sure this index is using the CloudSearch server class.
+  if ($server == NULL || $server->class != 'search_api_cloudsearch_service') {
+    return FALSE;
+  }
+  else {
+    return user_access('administer') && user_access('search_api');
+  }
+
+}

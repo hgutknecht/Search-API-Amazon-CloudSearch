@@ -11,18 +11,6 @@
  * 		- Remove documents (items) from CloudSearch
  * 		- Provide status information about the Domain
  *
- * Terminology
- *
- * There are some important differences between the terminology of CloudSearch
- * and Search API. Below is a list of translations
- *
- *     =============================
- *     SEARCH API		CLOUDSEARCH
- *     =============================
- * 	   Index			Domain
- * 	   Field			Index
- *     Item				Document
- *
  * This class makes use of the AWS SDK for PHP. For more information
  * see @link http://aws.amazon.com/sdkforphp/ documentation @endlink
  */
@@ -33,11 +21,13 @@ class AWSCloudSearchDomain {
   protected $domainDocEndpoint;
   protected $documentBatchAction = '/{API_VERSION}/documents/batch';
   protected $indexMachineName;
+  protected $serverOptions;
 
   /**
    * Constructor.
    */
   public function __construct($options, $index_machine_name) {
+    $this->serverOptions = $options;
     $this->domainName = $options['domain_name'];
     $this->indexMachineName = $index_machine_name;
     $this->documentBatchAction = str_replace('{API_VERSION}', $options['cloudsearch_api_version'], $this->documentBatchAction);
@@ -149,8 +139,10 @@ class AWSCloudSearchDomain {
    * @return boolean
    *   If the add index request worked.
    */
-  protected function AddIndex($index_field, $index_type, $facet, $result, $searchable, $source_field = NULL) {
-    $index_field = self::encodeIndexName($this->indexMachineName, $index_field);
+  protected function addIndex($index_field, $index_type, $facet, $result, $searchable, $source_field = NULL, $skip_encode = FALSE) {
+    if (!$skip_encode) {
+      $index_field = self::encodeIndexName($this->indexMachineName, $index_field);
+    }
     if ($source_field != NULL) {
       $source_field = self::encodeIndexName($this->indexMachineName, $source_field);
     }
@@ -205,7 +197,7 @@ class AWSCloudSearchDomain {
    * @return boolean
    *   If the remove index request worked.
    */
-  protected function RemoveIndex($index_field) {
+  protected function removeIndex($index_field) {
     $index_field = self::encodeIndexName($this->indexMachineName, $index_field);
     $response = $this->cloudSearchInstance->delete_index_field($this->domainName, $index_field);
     return AWSCloudSearchHelper::checkAndReport(t('Delete index'), $response, TRUE);
@@ -245,71 +237,92 @@ class AWSCloudSearchDomain {
    *   Returns true if the request was successful, false if it was not
    */
   public function updateIndexes(SearchApiIndex $index) {
+
+    // Setup counts in order to report back what was actually changed.
     $deleted_count = 0;
     $new_updated_count = 0;
     $ignored_count = 0;
 
-    $success = TRUE;
-    $errors = array();
-
     // Populate an array of existing fields to remove any indexes.
     $delete_fields = array();
-    $standard_fields_found = FALSE;
+
+    $found_index_document_field = FALSE;
+
     /* Get the indexes out of CloudSearch and check them against
      * the modified ones in Drupal.
      */
-    $new_fields = $index->getFields();
+    $search_api_fields = $index->getFields();
     $current_cs_indexes = $this->getIndexes()->body->DescribeIndexFieldsResult->IndexFields->member;
-    foreach ($current_cs_indexes as $index) {
-      $field_name = self::decodeIndexName($this->indexMachineName, $index->Options->IndexFieldName);
-      $found = FALSE;
-      foreach ($new_fields as $field => $info) {
-        if ($field == $field_name || 'sort_' . $field == $field_name) {
-          $found = TRUE;
+    foreach ($current_cs_indexes as $cs_index) {
+      // Only look at fields that are for this index.
+      if ($this->startsWith($cs_index->Options->IndexFieldName, $this->indexMachineName . '_')) {
+        $field_name = self::decodeIndexName($this->indexMachineName, $cs_index->Options->IndexFieldName);
+        $found = FALSE;
+        foreach ($search_api_fields as $field => $info) {
+          if ($field == $field_name || 'sort_' . $field == $field_name) {
+            $found = TRUE;
+          }
+        }
+        if (!$found) {
+          $delete_fields[] = $field_name;
         }
       }
-      if (!$found) {
-        $delete_fields[] = $field_name;
+
+      if ($cs_index->Options->IndexFieldName == 'search_api_document_index_machine_name') {
+        $found_index_document_field = TRUE;
       }
     }
 
+    // Now perform the actual delete on the CloudSearch domain.
     foreach ($delete_fields as $field) {
-      $response = $this->RemoveIndex($field);
+      $response = $this->removeIndex($field);
       $deleted_count++;
     }
 
-    foreach ($new_fields as $name => $field_info) {
+    /* Add special index field to store the index machine name
+     * against this document
+     */
+    if (!$found_index_document_field) {
+      $this->addIndex('search_api_document_index_machine_name', 'literal', TRUE, FALSE, TRUE, NULL, TRUE);
+      $new_updated_count++;
+    }
+
+    /* Go through each search api field and add to CloudSearch domain
+     * if it has been modified in some way or is totally new.
+     */
+    foreach ($search_api_fields as $name => $field_info) {
       /* Only do something with this field if it differs from the
        * cloudsearch index in anyway.
        */
       $is_modified = $this->checkFieldChanged($name, $field_info, $current_cs_indexes);
+
       if ($is_modified == TRUE) {
+        $cs_index_data = $this->searchAPIFieldToCloudSearch($name, $field_info);
 
-        $cs_index_data = $this->convertSearchApiFieldTypeToAWSIndexType($field_info['type']);
-
+        // Localise return fields for brevity.
         $index_type = $cs_index_data['index_type'];
         $facet = $cs_index_data['facet'];
         $searchable = $cs_index_data['searchable'];
         $sortable = $cs_index_data['sortable'];
+        $ranges = $cs_index_data['ranges'];
+        $result = $cs_index_data['result'];
+        $source_fields = $cs_index_data['source_fields'];
 
-        $this->AddIndex($name, $index_type, $facet, FALSE, $searchable, NULL);
+        // Add the primary index for this field.
+        $this->addIndex($name, $index_type, $facet, $result, $searchable, NULL);
 
-        /* Have to create seperate fields for any index that
-         * needs to be sorted and faceted.
-         */
-        if ($sortable == TRUE && $facet == 1) {
-          $sort_field_name = 'sort_' . $name;
-          if ($field_info['type'] == 'decimal') {
-            $index_type = 'uint';
-
-            /* Why? there is no decimal datatype in CloudSearch so change to
-             * uint, this isnt accurate but it's A solution, better way would
-             * be to encode the price as an alpha string so it can be sorted
-             * alphabetically
-             */
-          }
-          $this->AddIndex($sort_field_name, $index_type, FALSE, TRUE, FALSE, $name);
+        // Add any additional fields (if it needs to be sortable or ranged).
+        foreach ($source_fields as $source_field) {
+          $this->addIndex($source_field['name'], $source_field['index_type'], $source_field['faceted'], $source_field['result'], $source_field['searchable'], $name);
         }
+
+        /* Update servers options for this Index.  These will be
+         * used by the query process to quickly lookup the CloudSearch types
+         */
+        $options = $index->server()->options;
+        $options['index_options'][$index->machine_name]['fields'][$name] = $cs_index_data;
+        $index->server()->update(array('options' => $options));
+
         $new_updated_count++;
       }
       else {
@@ -320,8 +333,23 @@ class AWSCloudSearchDomain {
     $msg = t('CloudSearch Index update status: Deleted:') . $deleted_count . ' ' . t('Updated/New') . ': ' . $new_updated_count . ' ' . t('Not modified') . ':' . $ignored_count;
     drupal_set_message(check_plain($msg));
 
-    // Now tell CloudSearch to start indexing.
-    return $this->indexDocuments();
+    /* Now tell CloudSearch to start indexing.
+     * While this process takes place no documents can be uploaded.
+     */
+    if ($new_updated_count > 0) {
+      return $this->indexDocuments();
+    }
+    else {
+      return TRUE;
+    }
+  }
+
+  /**
+   * Helper. Determines if string starts with given string.
+   */
+  function startsWith($haystack, $needle) {
+      $length = strlen($needle);
+      return (substr($haystack, 0, $length) === $needle);
   }
 
   /**
@@ -333,26 +361,40 @@ class AWSCloudSearchDomain {
     foreach ($cs_fields as $index) {
       $field_name = self::decodeIndexName($this->indexMachineName, $index->Options->IndexFieldName);
       if ($name == $field_name) {
-        $cs_index_data = $this->convertSearchApiFieldTypeToAWSIndexType($field['type']);
+
+        $cs_index_data = $this->searchAPIFieldToCloudSearch($name, $field);
         $index_type = $cs_index_data['index_type'];
-        $facet = $cs_index_data['facet'];
-        $searchable = $cs_index_data['searchable'];
-        $sortable = $cs_index_data['sortable'];
+        $facet = $cs_index_data['facet'] == TRUE ? "true" : "false";
+        $searchable = $cs_index_data['searchable'] == TRUE ? "true" : "false";
+        $source_fields = $cs_index_data['source_fields'];
+
+        // If this field should have a sort field then check it has.
+        if ($cs_index_data['has_sort_field']) {
+          $found = FALSE;
+          foreach ($cs_fields as $index_a) {
+            $field_name_a = self::decodeIndexName($this->indexMachineName, $index_a->Options->IndexFieldName);
+            foreach ($source_fields as $sorce_field) {
+              if ($field_name_a == $sorce_field['name']) {
+                $found = TRUE;
+              }
+            }
+          }
+          if (!$found) {
+            return TRUE;
+          }
+        }
 
         if ((string) $index->Options->IndexFieldType != $index_type) {
           return TRUE;
         }
         if ($index_type == 'literal') {
-          if ((string) $index->Options->LiteralOptions->FacetEnabled == "true" && $facet == FALSE) {
+          if ((string) $index->Options->LiteralOptions->FacetEnabled != $facet) {
             return TRUE;
+
           }
-          if ((string) $index->Options->LiteralOptions->SearchEnabled == "true" && $searchable == FALSE) {
+          if ((string) $index->Options->LiteralOptions->SearchEnabled != $searchable) {
             return TRUE;
-          }
-        }
-        if ($index_type == 'text') {
-          if ((string) $index->Options->TextOptions->FacetEnabled == "true" && $facet == FALSE) {
-            return TRUE;
+
           }
         }
         return FALSE;
@@ -364,66 +406,121 @@ class AWSCloudSearchDomain {
   }
 
   /**
-   * Helper - Converts a SearchAPI field into AWS index.
+   * Converts a SearchAPI field into a CloudSearch index
    *
-   * Takes the Search API field type and converts to AWS Index
-   * type including index options.
+   * Due to the restrictions of CloudSearch fields additional fields
+   * may need to be created to satisfy certain feaures.
    *
-   * Dev Note: This may be a bit too primative, possibly
-   * look at alternative ways to identify the index options.
+   * The primary restrictions are:
+   *
+   * A CloudSearch Index cannot be sortable and faceted.  Therefore if a
+   * faceted field needs to also be sortable a new field needs to be
+   * created that holds a copy of the original field and is set to sortable.
+   * (Note: by sortable we mean that it's set to appear in the results).
+   *
+   * If a range search is requried on a number field but it is also faceted
+   * then a new field needs to be created.
+   *
+   * This function is static as it can be used by the real time search process
+   * which would not want the added overhead of instantiating
+   * the full Domain object.
    */
-  public function convertSearchApiFieldTypeToAWSIndexType($type) {
+  public function searchAPIFieldToCloudSearch($name, $field_info) {
     $return_data = array();
-    switch ($type) {
+
+    $is_facet = $this->isFieldFacet($name);
+
+    // Setup default return items.
+    $return_data['sortable'] = FALSE;
+    $return_data['facet'] = $is_facet;
+    $return_data['result'] = !$is_facet;
+    $return_data['ranges'] = FALSE;
+    $return_data['searchable'] = TRUE;
+    $return_data['has_sort_field'] = FALSE;
+
+    /* Create an array to hold any additional source fields
+     * required because of restrictions in the configuration
+     * of CloudSearch index fields.  E.g. a field can't be
+     * both sortable and faceted.
+     */
+    $return_data['source_fields'] = array();
+
+    if (!empty($this->serverOptions['index_options'][$this->indexMachineName]['sorts'][$name])) {
+      $return_data['sortable'] = TRUE;
+    }
+    if (!empty($this->serverOptions['index_options'][$this->indexMachineName]['ranges'][$name])) {
+      $return_data['ranges'] = TRUE;
+    }
+
+    // Convert Search API type into CloudSearch type (uint, literal, text).
+    switch ($field_info['type']) {
       case "string":
         $return_data['index_type'] = 'literal';
-        $return_data['facet'] = TRUE;
-        $return_data['sortable'] = TRUE;
-        $return_data['searchable'] = TRUE;
         break;
 
       case "date":
-        $return_data['index_type'] = 'uint';
-        $return_data['facet'] = TRUE;
-        $return_data['sortable'] = TRUE;
-        $return_data['searchable'] = TRUE;
+        $return_data['index_type'] = $return_data['facet'] == TRUE ? 'literal' : 'uint';
         break;
 
       case "text":
         $return_data['index_type'] = 'text';
-        $return_data['facet'] = FALSE;
-        $return_data['sortable'] = FALSE;
-        $return_data['searchable'] = TRUE;
         break;
 
       case "boolean":
-        $return_data['index_type'] = 'literal';
-        $return_data['facet'] = TRUE;
-        $return_data['sortable'] = TRUE;
-        $return_data['searchable'] = TRUE;
+        $return_data['index_type'] = $return_data['facet'] == TRUE ? 'literal' : 'uint';
         break;
 
       case "integer":
-        $return_data['index_type'] = 'uint';
-        $return_data['facet'] = TRUE;
-        $return_data['sortable'] = TRUE;
-        $return_data['searchable'] = TRUE;
+        $return_data['index_type'] = $return_data['facet'] == TRUE ? 'literal' : 'uint';
         break;
 
       case "decimal":
         $return_data['index_type'] = 'literal';
-        $return_data['facet'] = TRUE;
-        $return_data['sortable'] = TRUE;
-        $return_data['searchable'] = TRUE;
         break;
 
       default:
         $return_data['index_type'] = 'literal';
-        $return_data['facet'] = TRUE;
-        $return_data['sortable'] = TRUE;
-        $return_data['searchable'] = TRUE;
+        break;
     }
+
+    if (($return_data['sortable'] == TRUE || $return_data['ranges'] == TRUE) && $return_data['facet'] == TRUE) {
+      /* CloudSearch text and literal indexes cannot be both
+       * sortable and faceted so need to create a new source
+       * field.  If the field is a decimal then conver to uint
+       * as there is no data type for decimal and we can't
+       * sort as a literal datatype.
+       *
+       * Dev note: For the most accuracy the decimal could be converted
+       * to alpha numeric and set as a literal data type.
+       */
+      $return_data['source_fields'][] = array(
+        'name' => 'sort_' . $name,
+        'index_type' => ($field_info['type'] == 'decimal' || $field_info['type'] == 'integer') ? 'uint' : $return_data['index_type'],
+        'result' => TRUE,
+        'faceted' => $return_data['ranges'],
+        'searchable' => FALSE,
+      );
+
+      /* Set a flag also for any calling wanted just to know that it has a
+       * sperate source field
+       */
+      $return_data['has_sort_field'] = TRUE;
+
+    }
+
     return $return_data;
+  }
+
+  /**
+   * Helper - Checks the field name against the FacetAPI table given
+   * the index machine name
+   */
+  protected function isFieldFacet($field_name) {
+    $result = db_query('SELECT facet FROM facetapi WHERE searcher = :searcher AND enabled = 1 AND facet = :field_name', array(
+      ':searcher' => 'search_api@' . $this->indexMachineName,
+      ':field_name' => $field_name)
+    );
+    return (count($result->fetchAll()) > 0);
   }
 
   /**
@@ -440,6 +537,9 @@ class AWSCloudSearchDomain {
 
     foreach ($items as $key => $item) {
       $values = array();
+      // Add the standard document index machine name field to document.
+      $values['search_api_document_index_machine_name'] = $this->indexMachineName;
+
       foreach ($item as $name => $value) {
         $name = self::encodeIndexName($this->indexMachineName, $name);
         if ($value['value'] != NULL) {

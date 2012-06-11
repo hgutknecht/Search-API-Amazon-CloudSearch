@@ -274,7 +274,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
    *   otherwise.
    */
   public function supportsFeature($feature) {
-    return $feature == 'search_api_facets' || $feature == 'search_api_views' || $feature == 'search_api_sort';
+    return $feature == 'search_api_facets' || $feature == 'search_api_views' || $feature == 'search_api_sort' || $feature == 'search_api_facets_operator_or';
   }
 
   /**
@@ -408,7 +408,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
   public function deleteItems($ids = 'all', SearchApiIndex $index = NULL) {
     $this->checkDomainLoaded(TRUE);
 
-    if ($ids == 'all') {
+    if ($ids == 'all' && $index == NULL) {
       $ids = array();
       drupal_set_message(t('SearchAPI CloudSearch does not currently support the removal of all documents.'), 'warning');
     }
@@ -419,6 +419,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
       $result = $query
         ->entityCondition('entity_type', $index->item_type)
         ->execute();
+
       if (isset($result[$index->item_type])) {
         $csdomain->removeDocuments(array_keys($result[$index->item_type]));
       }
