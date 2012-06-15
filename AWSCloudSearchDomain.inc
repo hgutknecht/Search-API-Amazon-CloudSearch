@@ -5,7 +5,7 @@
  * Encapsulates all CloudSearch communication relating to the
  * administration of a Domain.
  *
- * It's key responsiblity is to
+ * It's key responsiblities are to
  * 		- Manage the creation, modification and removal of CloudSearch indexes
  * 		- Send documents (items) updates to CloudSearch
  * 		- Remove documents (items) from CloudSearch
@@ -51,7 +51,6 @@ class AWSCloudSearchDomain {
     /* Check response contains the domain requested, it may have
      * been deleted outside of this module.
      */
-
     if ($details->body->DescribeDomainsResult->DomainStatusList->member && $details->body->DescribeDomainsResult->DomainStatusList->member->DomainName == $this->domainName) {
       return $details->body->DescribeDomainsResult->DomainStatusList->member;
     }
@@ -177,7 +176,6 @@ class AWSCloudSearchDomain {
     /* If source field specified then we effectively tell AWS to get's it's
      * value from the field specificed in $source_field.
      */
-
     if ($source_field != NULL) {
       $options['SourceAttributes'] = array(array('SourceDataFunction' => 'Copy', 'SourceDataCopy' => array('SourceName' => $source_field)));
     }
@@ -216,7 +214,7 @@ class AWSCloudSearchDomain {
   /**
    * Kicks off an Index Documents request within CloudSearch.
    *
-   * This will process any modification to the index.
+   * This will process any modifications to the index.
    *
    * @return boolean
    *   Returns true if the request was successful, false if it was not
@@ -535,13 +533,21 @@ class AWSCloudSearchDomain {
     $field_values = array();
 
     foreach ($items as $key => $item) {
+      // Values array holds all the fields for this item.
       $values = array();
       // Add the standard document index machine name field to document.
       $values['search_api_document_index_machine_name'] = $this->indexMachineName;
 
+      // Iterate through each field for this item and create JSON SDF doc.
       foreach ($item as $name => $value) {
+
+        /* Converts the Search API field name into a safe CloudSearch field
+         * prefixing the index machine name so that this index documents
+         * are isollated within the Domain.
+         */
         $name = self::encodeIndexName($this->indexMachineName, $name);
         if ($value['value'] != NULL) {
+
           if ($value['type'] == 'tokens') {
 
             /* CloudSearch doesn't support tokens like this so
@@ -554,15 +560,37 @@ class AWSCloudSearchDomain {
             $values[$name] = rtrim($combined, ' ');
           }
           elseif (is_array($value['value'])) {
+            /* If this is a multi-valued item. Just associate the array
+             * with the field values.
+             */
             foreach ($value['value'] as $val) {
               $values[$name][] = $val;
             }
           }
           else {
+            // Standard single value field.
             $values[$name] = $value['value'];
           }
         }
       }
+
+      /* Create the SDF array that will be encoded into Json and sent to AWS.
+       *
+       * Version: CloudSearch requires a version number.  The version must
+       * always be greater than the current document version number
+       * else it will not get updated.  We set the version to the current
+       * UNIX time as this will guarantee it's the latest version.
+       * This is an accepted technique for document versioning.
+       *
+       * Language: As of 14 June 2012 CloudSearch only supports 'en' language.
+       * Given that Search API manages the language using a dedicated
+       * index field this isn't strictly required.
+       *
+       * ID: To ensure this document is unique to this index only the entityid
+       * is combined with the index machine name.  This ensures that if
+       * more than one index is using the same domain they are kept
+       * totally seperate.
+       */
       $json[] = array(
         'type' => 'add',
         'id' => self::createId($this->indexMachineName, $key),
@@ -573,6 +601,7 @@ class AWSCloudSearchDomain {
 
     }
 
+    // Encode the SDF array and post to CloudSearch Document endpoint.
     $status = $this->submitJsonRequest(json_encode($json));
     return TRUE;
 
@@ -580,9 +609,11 @@ class AWSCloudSearchDomain {
 
 
   /**
-   *  Removes documents from CloudSearch.
+   * Removes documents from CloudSearch.
    *
-   *  Converts ids into JSON SDF document and sends to Cloudsearch endpoint.
+   * Converts ids into JSON SDF document and sends to Cloudsearch endpoint.
+   * Version is set to current UNIX time to ensure it is the latest
+   * version. 
    *
    * @param array $ids
    *   An array of ids to remove
@@ -592,11 +623,12 @@ class AWSCloudSearchDomain {
     foreach ($ids as $id) {
       $json[] = array(
         'type' => 'delete',
-        'id' => self::encodeIndexName($this->indexMachineName, $id),
+        'id' => $this->createId($this->indexMachineName, $id),
         'version' => time(),
       );
     }
 
+    // Encode the SDF document array and post to Document endpoint.
     $this->submitJsonRequest(json_encode($json));
 
   }

@@ -47,7 +47,6 @@ class AWSCloudSearchQuery {
 
     // Sort out pager.
     $page_size = empty($query_options['limit']) ? 0 : $query_options['limit'];
-    $pagenum = pager_find_page() * $page_size;
     $page_size = $page_size > 0 ? "&size={$page_size}" : '';
     $currentpage = "&start={$query_options['offset']}";
 
