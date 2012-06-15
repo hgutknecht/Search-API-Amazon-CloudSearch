@@ -93,13 +93,15 @@ class AWSCloudSearchQuery {
       $r = '&rank=';
       foreach ($sort as $field_name => $order) {
         $r .= $order == 'DESC' ? '-' : '';
-        $r .= AWSCloudSearchDomain::encodeIndexName($this->indexMachineName, 'sort_' . $field_name) . ',';
-      }
-      if ($field_name == 'search_api_relevance') {
-        $r .= $order == 'DESC' ? '-text_relevance,' : 'text_relevance,';
-      }
-      if ($field_name == 'search_api_id') {
-        $r .= $order == 'DESC' ? '-id,' : 'id,';
+        if ($field_name == 'search_api_relevance') {
+          $r .= 'text_relevance,';
+        }
+        elseif ($field_name == 'search_api_id') {
+          $r .= 'id,';
+        }
+        else {
+          $r .= AWSCloudSearchDomain::encodeIndexName($this->indexMachineName, 'sort_' . $field_name) . ',';
+        }
       }
       $r = rtrim($r, ',');
     }
