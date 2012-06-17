@@ -46,7 +46,7 @@ function search_api_amazon_cloudsearch_index_setup($form, &$form_state, SearchAp
   if (!empty($index->options['fields'])) {
     foreach ($index->options['fields'] as $key => $field) {
       $fields[$key] = $key;
-      if ($field['type'] == 'integer' || $field['type'] == 'decimal') {
+      if (AWSCloudSearchDomain::isNumericFieldType($field['type'])) {
         $range_fields[$key] = $key;
       }
     }

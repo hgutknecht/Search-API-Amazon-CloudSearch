@@ -313,7 +313,7 @@ class AWSCloudSearchDomain {
         foreach ($source_fields as $source_field) {
           $this->addIndex($source_field['name'], $source_field['index_type'], $source_field['faceted'], $source_field['result'], $source_field['searchable'], $name);
         }
-
+  
         /* Update servers options for this Index.  These will be
          * used by the query process to quickly lookup the CloudSearch types
          */
@@ -493,20 +493,23 @@ class AWSCloudSearchDomain {
        */
       $return_data['source_fields'][] = array(
         'name' => 'sort_' . $name,
-        'index_type' => ($field_info['type'] == 'decimal' || $field_info['type'] == 'integer') ? 'uint' : $return_data['index_type'],
+        'index_type' => self::isNumericFieldType($field_info['type']) ? 'uint' : $return_data['index_type'],
         'result' => TRUE,
         'faceted' => $return_data['ranges'],
         'searchable' => FALSE,
       );
 
-      /* Set a flag also for any calling wanted just to know that it has a
-       * sperate source field
-       */
       $return_data['has_sort_field'] = TRUE;
-
     }
 
     return $return_data;
+  }
+
+  /**
+   * Helper - Determines if a Search API field is a numeric.
+   */
+  public static function isNumericFieldType($field_type) {
+    return $field_type == 'decimal' || $field_type == 'integer' || $field_type == 'date';
   }
 
   /**

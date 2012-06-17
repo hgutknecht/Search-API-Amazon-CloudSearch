@@ -171,6 +171,7 @@ class AWSCloudSearchQuery {
     foreach ($filter->getFilters() as $f) {
       if (is_array($f)) {
         $val = $this->getFinalFieldFilterValue($f);
+        $field_type = $this->serverFieldOptions[$f[0]]['index_type'];
         $fname = AWSCloudSearchDomain::encodeIndexName($this->indexMachineName, $f[0]);
         // Setup condition based on operand.
         switch ($f[2]) {
@@ -183,12 +184,16 @@ class AWSCloudSearchQuery {
             break;
 
           case ">=":
-            $fname = $this->getSortFieldName($fname);
+            /* Field will need to be changed to the sort/ranged field
+             * name if the standard field is not of type int. Applies
+             * to all ranged queries.
+             */ 
+            $fname = $field_type != 'uint' ? $this->getSortFieldName($fname) : $fname; 
             $bq .= " {$fname}:{$f[1]}.. ";
             break;
 
           case "<=":
-            $fname = $this->getSortFieldName($fname);
+            $fname = $field_type != 'uint' ? $this->getSortFieldName($fname) : $fname;
             $bq .= " {$fname}:0..{$f[1]} ";
             break;
 
@@ -196,7 +201,7 @@ class AWSCloudSearchQuery {
             /* CloudSearch range filters are always inclusive so change value
              * to compensate.
              */
-            $fname = $this->getSortFieldName($fname);
+            $fname = $field_type != 'uint' ? $this->getSortFieldName($fname) : $fname;
             $val = $f[1] + 1;
             $bq .= " {$fname}:{$val}.. ";
             break;
@@ -205,7 +210,7 @@ class AWSCloudSearchQuery {
             /* CloudSearch range filters are always inclusive so change value
              * to compensate.
              */
-            $fname = $this->getSortFieldName($fname);
+            $fname = $field_type != 'uint' ? $this->getSortFieldName($fname) : $fname;
             $val = $f[1] > 0 ? $f[1] - 1 : 0;
             $bq .= " {$fname}:0..{$val} ";
             break;

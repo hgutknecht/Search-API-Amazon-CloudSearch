@@ -274,7 +274,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
    *   otherwise.
    */
   public function supportsFeature($feature) {
-    return $feature == 'search_api_facets' || $feature == 'search_api_views' || $feature == 'search_api_sort' || $feature == 'search_api_facets_operator_or';
+    return $feature == 'search_api_facets' || $feature == 'search_api_views' || $feature == 'search_api_sort' || $feature == 'search_api_facets_operator_or' || $feature == 'search_api_ranges';
   }
 
   /**
