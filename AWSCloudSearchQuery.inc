@@ -187,8 +187,8 @@ class AWSCloudSearchQuery {
             /* Field will need to be changed to the sort/ranged field
              * name if the standard field is not of type int. Applies
              * to all ranged queries.
-             */ 
-            $fname = $field_type != 'uint' ? $this->getSortFieldName($fname) : $fname; 
+             */
+            $fname = $field_type != 'uint' ? $this->getSortFieldName($fname) : $fname;
             $bq .= " {$fname}:{$f[1]}.. ";
             break;
 

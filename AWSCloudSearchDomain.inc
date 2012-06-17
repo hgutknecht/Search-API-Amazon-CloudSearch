@@ -313,7 +313,7 @@ class AWSCloudSearchDomain {
         foreach ($source_fields as $source_field) {
           $this->addIndex($source_field['name'], $source_field['index_type'], $source_field['faceted'], $source_field['result'], $source_field['searchable'], $name);
         }
-  
+
         /* Update servers options for this Index.  These will be
          * used by the query process to quickly lookup the CloudSearch types
          */
@@ -616,7 +616,7 @@ class AWSCloudSearchDomain {
    *
    * Converts ids into JSON SDF document and sends to Cloudsearch endpoint.
    * Version is set to current UNIX time to ensure it is the latest
-   * version. 
+   * version.
    *
    * @param array $ids
    *   An array of ids to remove
