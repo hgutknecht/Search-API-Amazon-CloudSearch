@@ -2,6 +2,7 @@ name = Search API Amazon CloudSearch
 description = Offers an implementation of the Search API that uses an Amazon AWS CloudSearch server for indexing content.
 dependencies[] = facetapi
 dependencies[] = search_api
+dependencies[] = awssdk
 package = Search
 core = 7.x
 

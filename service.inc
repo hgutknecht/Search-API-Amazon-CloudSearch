@@ -12,7 +12,6 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
    * Returns CloudSearch specific settings to the Search API add/edit form.
    */
   public function configurationForm(array $form, array &$form_state) {
-
     if (!$this->isAwsSdkSetup()) {
       drupal_set_message(t('AWS SDK for PHP is not installed. You cannot proceed until the SDK is installed.  Please follow the instructions in README.txt.'), 'error');
       return;
@@ -502,26 +501,9 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
 
   /**
    * Helper - Checks to see if AWS SDK for PHP is present.
-   *
-   * Can be present either in the PHP include (normally when using PEAR)
-   * or under the modules root director (/AWSSDKforPHP).
    */
   public function isAwsSdkSetup() {
-
-    // First check to see if it's been added under the modules root.
-    if (file_exists(drupal_get_path('module', 'search_api_amazon_cloudsearch') . '/AWSSDKforPHP/sdk.class.php')) {
-      return TRUE;
-    }
-
-    // Check each include path to see if AWSSDKforPHP is under any of them.
-    $paths = explode(PATH_SEPARATOR, get_include_path());
-
-    foreach ($paths as $path) {
-      if (file_exists($path . '/AWSSDKforPHP/sdk.class.php')) {
-        return TRUE;
-      }
-    }
-
-    return FALSE;
+    $info = libraries_load('awssdk');
+    return $info['installed'];
   }
 }

@@ -6,10 +6,6 @@
  * Simple helper class for use with CloudSearch.
  */
 
-require_once 'AWSSDKforPHP/sdk.class.php';
-require_once 'AWSSDKforPHP/services/ec2.class.php';
-require_once 'AWSSDKforPHP/services/cloudsearch.class.php';
-
 class AWSCloudSearchHelper {
 
   /**
@@ -18,6 +14,7 @@ class AWSCloudSearchHelper {
    * Given security credentials and AWS region.
    */
   public static function getAWSCloudSearchInstance($key, $secret, $region) {
+    libraries_load('awssdk');
     $search = new AmazonCloudSearch(self::buildAWSCredentials($key, $secret));
     $search->set_region($region);
     return $search;
@@ -46,6 +43,7 @@ class AWSCloudSearchHelper {
    * to get a list of regions via the API.
    */
   public static function getAWSRegions($key, $secret) {
+    libraries_load('awssdk');
     // Have to use the EC2 class for this.
     $ec2 = new AmazonEC2(buildAWSCredentials($key, $secret));
     $response = $ec2->describe_regions();
@@ -71,6 +69,8 @@ class AWSCloudSearchHelper {
    * Check response and report if it contains an error.
    */
   public static function checkAndReport($context, $response, $throw_exception = FALSE) {
+    libraries_load('awssdk');
+    
     if (!$response->isOK()) {
       $aws_msg = self::getAWSError($response);
       $msg = t('CloudSearch request failed:') . ' ' . t('Context') . ': ' . $context . ', ' . t('Message') . ': ' . $aws_msg;
