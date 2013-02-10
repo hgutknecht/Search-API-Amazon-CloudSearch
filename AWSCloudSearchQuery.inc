@@ -51,7 +51,7 @@ class AWSCloudSearchQuery {
     $currentpage = "&start={$query_options['offset']}";
 
     // Standard keyword search.
-    $keys = $this->prepareKeys($search_api_query->getKeys());
+    $keys = $this->combineKeys($this->prepareKeys($search_api_query->getKeys()));
     $q = $keys == '' ? 'q=%' : "q={$keys}";
 
     /* Return values, this is pretty simple in SearchAPI,
@@ -319,6 +319,33 @@ class AWSCloudSearchQuery {
       }
     }
     return array_filter($keys);
+  }
+
+  /**
+   * Helper method for combining keys to search query.
+   */
+  protected function combineKeys($keys) {
+    if (is_scalar($keys)) {
+      return $keys;
+    }
+
+    $op = ' ';
+    if (isset($keys['#conjunction'])) {
+      switch ($keys['#conjunction']) {
+        case 'AND':
+          $op = '+';
+          break;
+        case 'OR':
+          $op = '|';
+          break;
+        default:
+          $op = ' ';
+          break;
+      }
+      unset($keys['#conjunction']);
+    }
+
+    return implode($op, $keys);
   }
 
   /**

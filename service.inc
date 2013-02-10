@@ -44,7 +44,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
       '#type'  => 'select',
       '#title'  => t('Region'),
       '#required' => TRUE,
-      '#options' => array('cloudsearch.us-east-1.amazonaws.com' => 'us-east-1'),
+      '#options' => array('cloudsearch.us-east-1.amazonaws.com' => 'us-east-1','cloudsearch.eu-west-1.amazonaws.com' => 'eu-west-1'),
       '#description' => t('The region the current domain is in or where you would like to put the new domain.'),
       '#default_value' => empty($this->options) ? '' : $this->options['region'],
     );
