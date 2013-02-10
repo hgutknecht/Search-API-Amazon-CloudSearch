@@ -19,6 +19,7 @@ follows (assumes LINUX):
 
 Via GitHub
 
-Pull down the source code down into a directory under the sites/all/libraries/awssdk
+Pull down the source code down into a directory under 
+the sites/all/libraries/awssdk.
 
 > git clone git://github.com/amazonwebservices/aws-sdk-for-php.git AWSSDKforPHP

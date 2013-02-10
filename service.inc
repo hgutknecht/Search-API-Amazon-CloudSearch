@@ -148,7 +148,6 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
       return;
     }
 
-
     $cloudsearch = AWSCloudSearchHelper::getAWSCloudSearchInstance($form_state['values']['options']['form']['aws_access_key'], $form_state['values']['options']['form']['aws_secret_key'], $form_state['values']['options']['form']['region']);
 
     $new = empty($form_state['values']['options']['form']['create_new_domain']) ? FALSE : $form_state['values']['options']['form']['create_new_domain'];
@@ -268,7 +267,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
    * @param string $feature
    *   The name of the optional feature.
    *
-   * @return boolean
+   * @return bool
    *   TRUE if this service knows and supports the specified feature. FALSE
    *   otherwise.
    */

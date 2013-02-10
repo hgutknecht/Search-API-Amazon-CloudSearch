@@ -135,7 +135,7 @@ class AWSCloudSearchDomain {
    * @param string $source_field
    *   Used if this index should copy it's value from an existing index
    *
-   * @return boolean
+   * @return bool
    *   If the add index request worked.
    */
   protected function addIndex($index_field, $index_type, $facet, $result, $searchable, $source_field = NULL, $skip_encode = FALSE) {
@@ -192,7 +192,7 @@ class AWSCloudSearchDomain {
    * @param string $index_field
    *   The name of the index to remove
    *
-   * @return boolean
+   * @return bool
    *   If the remove index request worked.
    */
   protected function removeIndex($index_field) {
@@ -216,7 +216,7 @@ class AWSCloudSearchDomain {
    *
    * This will process any modifications to the index.
    *
-   * @return boolean
+   * @return bool
    *   Returns true if the request was successful, false if it was not
    */
   protected function indexDocuments() {
@@ -226,12 +226,12 @@ class AWSCloudSearchDomain {
 
 
   /**
-   *  Updates any modified CloudSearch indexes given the provided index.
+   * Updates any modified CloudSearch indexes given the provided index.
    *
    * @param SearchApiIndex $index
    *   The index to update
    *
-   * @return boolean
+   * @return bool
    *   Returns true if the request was successful, false if it was not
    */
   public function updateIndexes(SearchApiIndex $index) {
@@ -647,7 +647,6 @@ class AWSCloudSearchDomain {
 
     $response = $this->cloudSearchInstance->describe_service_access_policies($this->domainName);
     $options = json_decode($response->body->DescribeServiceAccessPoliciesResult->AccessPolicies->Options);
-
 
     // Build up IAM Json document for doc and search endpoint.
     $options->Statement[] = array(

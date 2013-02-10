@@ -237,8 +237,10 @@ class AWSCloudSearchQuery {
     switch ($this->serverFieldOptions[$field[0]]['index_type']) {
       case 'literal':
         return "'$field[1]'";
+        
       case 'text':
         return "'$field[1]'";
+        
       case 'uint':
         return $field[1];
     }
@@ -335,9 +337,11 @@ class AWSCloudSearchQuery {
         case 'AND':
           $op = '+';
           break;
+
         case 'OR':
           $op = '|';
           break;
+          
         default:
           $op = ' ';
           break;

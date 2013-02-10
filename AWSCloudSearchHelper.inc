@@ -70,7 +70,6 @@ class AWSCloudSearchHelper {
    */
   public static function checkAndReport($context, $response, $throw_exception = FALSE) {
     libraries_load('awssdk');
-    
     if (!$response->isOK()) {
       $aws_msg = self::getAWSError($response);
       $msg = t('CloudSearch request failed:') . ' ' . t('Context') . ': ' . $context . ', ' . t('Message') . ': ' . $aws_msg;

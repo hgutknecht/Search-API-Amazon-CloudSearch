@@ -40,7 +40,6 @@ function search_api_amazon_cloudsearch_index_setup($form, &$form_state, SearchAp
     t('Note that these settings do not have any impact on the standard Search API settings.') . '</p>',
   );
 
-
   $fields = array();
   $range_fields = array();
   if (!empty($index->options['fields'])) {
