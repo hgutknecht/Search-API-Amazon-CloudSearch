@@ -44,7 +44,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
       '#type'  => 'select',
       '#title'  => t('Region'),
       '#required' => TRUE,
-      '#options' => array('cloudsearch.us-east-1.amazonaws.com' => 'us-east-1', 'cloudsearch.us-west-2.amazonaws.com' => 'us-west-2', 'cloudsearch.eu-west-1.amazonaws.com' => 'eu-west-1'),
+      '#options' => array('us-east-1' => 'us-east-1', 'us-west-2' => 'us-west-2', 'eu-west-1' => 'eu-west-1'),
       '#description' => t('The region the current domain is in or where you would like to put the new domain.'),
       '#default_value' => empty($this->options) ? '' : $this->options['region'],
     );
@@ -80,12 +80,27 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
       );
     }
 
+    $form['instance_name'] = array(
+      '#type'  => 'textfield',
+      '#title'  => t('Search instance name'),
+      '#required' => TRUE,
+      '#maxlength' => 28,
+      '#default_value' => empty($this->options) ? '' : $this->options['instance_name'],
+    );
+
+    $form['cross_site_search'] = array(
+      '#type'  => 'checkbox',
+      '#title'  => t('Enable cross site search?'),
+      '#description' => t('Checking this will enable searching across all documents stored in the search domain'),
+      '#default_value' => empty($this->options) ? '' : $this->options['cross_site_search'],
+    );
+
     $form['cloudsearch_api_version'] = array(
       '#type'  => 'textfield',
       '#title'  => t('API Version'),
       '#required' => TRUE,
       '#description' => t('Specify which API version should be used to communicate with CloudSearch.  Leave as default if unsure.'),
-      '#default_value' => '2011-02-01',
+      '#default_value' => '2013-01-01',
     );
 
     $form['show_debug'] = array(
@@ -152,20 +167,23 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
 
     $new = empty($form_state['values']['options']['form']['create_new_domain']) ? FALSE : $form_state['values']['options']['form']['create_new_domain'];
 
-    if ($new == TRUE) {
-      $response = $cloudsearch->describe_domains(array('DomainNames' => $domain_name));
-    }
-    else {
-      $response = $cloudsearch->describe_domains(array('DomainNames' => $domain_name));
-    }
 
-    if (!$response->isOK()) {
-      AWSCloudSearchHelper::checkAndReport(t('Retrieve domain details'), $response, FALSE);
-      form_error($form['aws_access_key'], check_plain(t('Failed to request domain details from CloudSearch.') . ': ' . AWSCloudSearchHelper::getAWSError($response)));
+    watchdog('search_api_amazon_cloudsearch', 'Checking to see if domain %domain exists', array('%domain' => $domain_name), WATCHDOG_DEBUG);
+
+    try {
+      $response = $cloudsearch->describeDomains(array(
+        'DomainNames' => array($domain_name))
+      );
+
+    }
+    catch (Aws\CloudSearch\CloudSearchException $e) {
+      watchdog('search_api_amazon_cloudsearch', 'Error trying to check domain status for %domain. Error: %error', array('%domain' => $domain_name, '%error' => $e), WATCHDOG_ERROR);
+      form_error($form['aws_access_key'], check_plain(t('Failed to request domain details from CloudSearch.') . ': ' . $e));
       return;
     }
 
-    if ($new == TRUE && count($response->body->DescribeDomainsResult->DomainStatusList->member) > 0) {
+    if ($new == TRUE && count($response['DomainStatusList']) > 0) {
+      watchdog('search_api_amazon_cloudsearch', 'Cannot create new domain, %domain already exists.', array('%domain' => $domain_name), WATCHDOG_ERROR);
       form_error($form['aws_access_key'], t('You have selected to create a new domain but this domain already exists.'));
       return;
     }
@@ -174,12 +192,13 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
      * raise an error if not.
      */
     if ($new == FALSE) {
-      if (count($response->body->DescribeDomainsResult->DomainStatusList->member) == 0) {
+      if (count($response['DomainStatusList']) == 0) {
+        watchdog('search_api_amazon_cloudsearch', 'Search domain %domain cannot be found.', array('%domain' => $domain_name), WATCHDOG_ERROR);
         form_error($form['domain_name'], t('Search domain not found, please check your details and try again.  If you want to create a new domain then tick the Create new domain checkbox.'));
       }
       else {
-        $form_state['storage']['search_endpoint'] = (string) $response->body->DescribeDomainsResult->DomainStatusList->member->SearchService->Endpoint;
-        $form_state['storage']['document_endpoint'] = (string) $response->body->DescribeDomainsResult->DomainStatusList->member->DocService->Endpoint;
+        $form_state['storage']['search_endpoint'] = (string) $response['DomainStatusList']['SearchService']['Endpoint'];
+        $form_state['storage']['document_endpoint'] = (string) $response['DomainStatusList']['DocService']['Endpoint'];
       }
     }
   }
@@ -200,18 +219,35 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
   public function configurationFormSubmit(array $form, array &$values, array &$form_state) {
 
     if (empty($values['create_new_domain']) == FALSE && $values['create_new_domain'] == TRUE) {
+
+
       // Create new domain in Cloudsearch.
       $cloudsearch = AWSCloudSearchHelper::getAWSCloudSearchInstance($values['aws_access_key'], $values['aws_secret_key'], $values['region']);
-      $response = $cloudsearch->create_domain($values['domain_name']);
-      if (!$response->isOK()) {
-        AWSCloudSearchHelper::checkAndReport(t('Create domain'), $response, TRUE);
+
+      try {
+        watchdog('search_api_amazon_cloudsearch', 'Creating new search domain: %domain', array('%domain' => $values['domain_name']), WATCHDOG_DEBUG);
+        $response = $cloudsearch->createDomain(array(
+          'DomainName' => $values['domain_name'],
+        )
+        );
+      }
+      catch (Aws\CloudSearch\CloudSearchException $e) {
+        watchdog('search_api_amazon_cloudsearch', 'Unable to create new search domain: %domain. Error: .', array('%domain' => $domain_name, '%error' => $e), WATCHDOG_ERROR);
         return;
       }
-      $response = $cloudsearch->describe_domains(array('DomainNames' => $values['domain_name']));
-      if (!$response->isOK()) {
-        AWSCloudSearchHelper::checkAndReport(t('Retrieve domain'), $response, TRUE);
+
+      try {
+        watchdog('search_api_amazon_cloudsearch', 'Verifying newly created new search domain: %domain', array('%domain' => $values['domain_name']), WATCHDOG_DEBUG);
+        $response = $cloudsearch->describeDomains(array(
+          'DomainNames' => array($values['domain_name'])
+        )
+        );
+      }
+      catch (Aws\CloudSearch\CloudSearchException $e) {
+        watchdog('search_api_amazon_cloudsearch', 'Unable to find newly created search domain: %domain. Error: .', array('%domain' => $domain_name, '%error' => $e), WATCHDOG_ERROR);
         return;
       }
+
       /* Set end points to constant as they will not
        * be available straight away.
        */
@@ -220,7 +256,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
 
       unset($values['create_new_domain']);
       drupal_set_message(t('The CloudSearch domain was created successfully.  It will take a few minutes for the domain to fully initialise.  Please allow some and check the domain status is Active before indexing items.'));
-
+      watchdog('search_api_amazon_cloudsearch', 'The CloudSearch domain %domain was created successfully.', array('%domain' => $values['domain_name']), WATCHDOG_DEBUG);
     }
     else {
       $values['search_endpoint'] = $form_state['storage']['search_endpoint'];
@@ -298,18 +334,16 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
     $output .= '<dt><strong>' . t('CloudSearch status') . '</strong></dt>' . "\n";
     $output .= '<dd><em>' . t('The following information was retrieved directly from AWS CloudSearch system.') . '</em></dd>' . "\n";
     $csdomain = new AWSCloudSearchDomain($this->options, NULL);
-    $domain_status = $csdomain->getDomainDetails();
+    $domain_details = $csdomain->getDomainDetails();
 
     // Check domain was found.
-    if ($domain_status == FALSE) {
+    if ($domain_details == FALSE) {
       $output .= '<dt class="error">' . t('Failed to retrieve domain details from AWS.') . '</dt>' . "\n";
     }
     else {
-      $domain_details = get_object_vars($domain_status);
       $this->checkDomainLoaded(TRUE);
 
-      $this->buildDomainDetails($domain_details, $domain_options);
-      foreach ($domain_options as $key => $value) {
+      foreach ($domain_details as $key => $value) {
         $output .= '<dt>' . check_plain($key) . '</dt>' . "\n";
         $output .= '<dd>' . nl2br(check_plain(print_r($value, TRUE))) . '</dd>' . "\n";
 
@@ -332,25 +366,6 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
     }
 
     return $output ? "<dl>\n$output</dl>" : '';
-  }
-
-  /**
-   * Helper - Creates a single flat array out of a CloudSearch domain details.
-   */
-  public function buildDomainDetails($details, &$options, $suffix = NULL) {
-    foreach ($details as $key => $name) {
-      if (is_object($name)) {
-        $this->buildDomainDetails(get_object_vars($details[$key]), $options, $key);
-      }
-      else {
-        if ($suffix != NULL) {
-          $options[$suffix . '  ' . $key] = $name;
-        }
-        else {
-          $options[$key] = $name;
-        }
-      }
-    }
   }
 
   /**
@@ -456,10 +471,10 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
     $csdomain = new AWSCloudSearchDomain($this->options, NULL);
     $status = $csdomain->getDomainDetails();
 
-    if (isset($status->SearchService->Endpoint) && isset($status->DocService->Endpoint)) {
+    if (isset($status['SearchService']['Endpoint']) && isset($status['DocService']['Endpoint'])) {
       $ops = $this->options;
-      $ops['search_endpoint'] = (string) $status->SearchService->Endpoint;
-      $ops['document_endpoint'] = (string) $status->DocService->Endpoint;
+      $ops['search_endpoint'] = (string) $status['SearchService']['Endpoint'];
+      $ops['document_endpoint'] = (string) $status['DocService']['Endpoint'];
       $this->server->update(array('options' => $ops));
       return TRUE;
     }
@@ -502,7 +517,7 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
    * Helper - Checks to see if AWS SDK for PHP is present.
    */
   public function isAwsSdkSetup() {
-    $info = libraries_load('awssdk');
+    $info = libraries_load('awssdk2');
     return $info['installed'];
   }
 }

@@ -41,23 +41,32 @@ class AWSCloudSearchDomain {
    * Get's the detail of the domain from AWS API.
    */
   public function getDomainDetails() {
-    $details = $this->cloudSearchInstance->describe_domains(array(
-        'DomainNames' => $this->domainName,
-    ));
+    try {
+      watchdog('search_api_amazon_cloudsearch', 'Looking up search domain: %domain',
+        array('%domain' => $this->domainName), WATCHDOG_DEBUG);
 
-    // Check response and throw exception if AWS returned an error message.
-    AWSCloudSearchHelper::checkAndReport('get_domain_details', $details, TRUE);
+      $details = $this->cloudSearchInstance->describeDomains(array(
+          'DomainNames' => array($this->domainName),
+      ));
+    }
+    catch (Exception $e) {
+      watchdog('search_api_amazon_cloudsearch', 'Unable to find search domain: %domain. Error: .',
+        array('%domain' => $this->domainName, '%error' => $e), WATCHDOG_ERROR);
+
+      return;
+    }
 
     /* Check response contains the domain requested, it may have
      * been deleted outside of this module.
      */
-    if ($details->body->DescribeDomainsResult->DomainStatusList->member && $details->body->DescribeDomainsResult->DomainStatusList->member->DomainName == $this->domainName) {
-      return $details->body->DescribeDomainsResult->DomainStatusList->member;
+    if (count($details['DomainStatusList']) > 0 && $details['DomainStatusList'][0]['DomainName'] == $this->domainName) {
+      return $details['DomainStatusList'][0];
     }
     else {
       $msg = t('Could not find domain') . ' ' . $this->domainName . ' ' . t('in the CloudSearch account specified. Please check in the AWS Console and review the health of this domain.');
       drupal_set_message(check_plain($msg), 'error');
-      watchdog('aws_cloudsearch', $msg, NULL, WATCHDOG_CRITICAL, $link = NULL);
+      watchdog('search_api_amazon_cloudsearch', $msg, NULL, WATCHDOG_CRITICAL, $link = NULL);
+
       return FALSE;
     }
   }
@@ -180,10 +189,17 @@ class AWSCloudSearchDomain {
       $options['SourceAttributes'] = array(array('SourceDataFunction' => 'Copy', 'SourceDataCopy' => array('SourceName' => $source_field)));
     }
 
-    // Call AWS.
-    $response = $this->cloudSearchInstance->define_index_field($this->domainName, $options);
+    try {
+      $response = $this->cloudSearchInstance->defineIndexField($this->domainName, $options);
+    }
 
-    return AWSCloudSearchHelper::checkAndReport(t('Add index'), $response, TRUE);
+    catch (Exception $e) {
+      watchdog('search_api_amazon_cloudsearch', 'Failed to add index %index for: %domain. Error: %error',
+        array('%domain' => $this->domainName, '%error' => $e, '%index' => $index_field), WATCHDOG_ERROR);
+      return FALSE;
+    }
+
+    return TRUE;
   }
 
   /**
@@ -197,8 +213,17 @@ class AWSCloudSearchDomain {
    */
   protected function removeIndex($index_field) {
     $index_field = self::encodeIndexName($this->indexMachineName, $index_field);
-    $response = $this->cloudSearchInstance->delete_index_field($this->domainName, $index_field);
-    return AWSCloudSearchHelper::checkAndReport(t('Delete index'), $response, TRUE);
+
+    try {
+        $response = $this->cloudSearchInstance->deleteIndexField($this->domainName, $index_field);
+    }
+    catch (Exception $e) {
+      watchdog('search_api_amazon_cloudsearch', 'Remove index %index failed for: %domain. Error: %error',
+        array('%domain' => $this->domainName, '%error' => $e, '%index' => $index_field), WATCHDOG_ERROR);
+      return FALSE;
+    }
+
+    return TRUE;
   }
 
   /**
@@ -208,7 +233,7 @@ class AWSCloudSearchDomain {
    *   All the index(field) information from the domain(index)
    */
   public function getIndexes() {
-    return $this->cloudSearchInstance->describe_index_fields($this->domainName);
+    return $this->cloudSearchInstance->describeIndexFields($this->domainName);
   }
 
   /**
@@ -220,8 +245,16 @@ class AWSCloudSearchDomain {
    *   Returns true if the request was successful, false if it was not
    */
   protected function indexDocuments() {
-    $response = $this->cloudSearchInstance->index_documents($this->domainName);
-    return AWSCloudSearchHelper::checkAndReport(t('Index documents'), $response, TRUE);
+    try {
+      $response = $this->cloudSearchInstance->indexDocuments($this->domainName);
+    }
+    catch (Exception $e) {
+      watchdog('search_api_amazon_cloudsearch', 'Index document request failed for: %domain. Error: %error',
+        array('%domain' => $this->domainName, '%error' => $e), WATCHDOG_ERROR);
+      return false;
+    }
+
+    return true;
   }
 
 
@@ -250,11 +283,11 @@ class AWSCloudSearchDomain {
      * the modified ones in Drupal.
      */
     $search_api_fields = $index->getFields();
-    $current_cs_indexes = $this->getIndexes()->body->DescribeIndexFieldsResult->IndexFields->member;
-    foreach ($current_cs_indexes as $cs_index) {
+    $current_cs_indexes = $this->getIndexes();
+    foreach ($current_cs_indexes['IndexFields'] as $cs_index) {
       // Only look at fields that are for this index.
-      if ($this->startsWith($cs_index->Options->IndexFieldName, $this->indexMachineName . '_')) {
-        $field_name = self::decodeIndexName($this->indexMachineName, $cs_index->Options->IndexFieldName);
+      if ($this->startsWith($cs_index['Options']['IndexFieldName'], $this->indexMachineName . '_')) {
+        $field_name = self::decodeIndexName($this->indexMachineName, $cs_index['Options']['IndexFieldName']);
         $found = FALSE;
         foreach ($search_api_fields as $field => $info) {
           if ($field == $field_name || 'sort_' . $field == $field_name) {
@@ -357,7 +390,7 @@ class AWSCloudSearchDomain {
    */
   public function checkFieldChanged($name, $field, $cs_fields) {
     foreach ($cs_fields as $index) {
-      $field_name = self::decodeIndexName($this->indexMachineName, $index->Options->IndexFieldName);
+      $field_name = self::decodeIndexName($this->indexMachineName, $index['Options']['IndexFieldName']);
       if ($name == $field_name) {
 
         $cs_index_data = $this->searchAPIFieldToCloudSearch($name, $field);
@@ -370,7 +403,7 @@ class AWSCloudSearchDomain {
         if ($cs_index_data['has_sort_field']) {
           $found = FALSE;
           foreach ($cs_fields as $index_a) {
-            $field_name_a = self::decodeIndexName($this->indexMachineName, $index_a->Options->IndexFieldName);
+            $field_name_a = self::decodeIndexName($this->indexMachineName, $index_a['Options']['IndexFieldName']);
             foreach ($source_fields as $sorce_field) {
               if ($field_name_a == $sorce_field['name']) {
                 $found = TRUE;
@@ -382,15 +415,15 @@ class AWSCloudSearchDomain {
           }
         }
 
-        if ((string) $index->Options->IndexFieldType != $index_type) {
+        if ((string) $index->Options['IndexFieldType'] != $index_type) {
           return TRUE;
         }
         if ($index_type == 'literal') {
-          if ((string) $index->Options->LiteralOptions->FacetEnabled != $facet) {
+          if ((string) $index['Options']['LiteralOptions']['FacetEnabled'] != $facet) {
             return TRUE;
 
           }
-          if ((string) $index->Options->LiteralOptions->SearchEnabled != $searchable) {
+          if ((string) $index['Options']['LiteralOptions']['SearchEnabled'] != $searchable) {
             return TRUE;
 
           }
@@ -640,29 +673,54 @@ class AWSCloudSearchDomain {
    * Add an ip address to the CloudSearch access policy.
    */
   public function addIPAccessPolicy($ip_address) {
+    watchdog('search_api_amazon_cloudsearch', 'Adding IP access policy for %ip on %domain',
+      array('%domain' => $this->domainName, '%ip' => $ip_address), WATCHDOG_DEBUG);
+
     $ip_address = $ip_address . "/32";
     $details = $this->getDomainDetails();
-    $search_arn = (string) $details->SearchService->Arn;
-    $doc_arn = (string) $details->DocService->Arn;
+    $domain_arn = (string) $details['ARN'];
 
-    $response = $this->cloudSearchInstance->describe_service_access_policies($this->domainName);
-    $options = json_decode($response->body->DescribeServiceAccessPoliciesResult->AccessPolicies->Options);
+    watchdog('search_api_amazon_cloudsearch', 'Describing access policy for %domain.',
+      array('%domain' => $this->domainName), WATCHDOG_DEBUG);
+
+    try {
+      $response = $this->cloudSearchInstance->describeServiceAccessPolicies(array(
+        'DomainName' => $this->domainName,
+      )
+      );
+    }
+    catch (Exception $e) {
+      watchdog('search_api_amazon_cloudsearch', 'Failed to update service access policy for %domain. Error: %error',
+        array('%domain' => $this->domainName, '%error' => $e), WATCHDOG_ERROR);
+      return FALSE;
+    }
+    
+    $options = json_decode($response['AccessPolicies']['Options']);
 
     // Build up IAM Json document for doc and search endpoint.
     $options->Statement[] = array(
       'Effect' => 'Allow',
       'Action' => '*',
-      'Resource' => $search_arn,
-      'Condition' => array('IpAddress' => array('aws:SourceIp' => array($ip_address))));
-    $options->Statement[] = array(
-      'Effect' => 'Allow',
-      'Action' => '*',
-      'Resource' => $doc_arn,
+      'Resource' => $domain_arn,
       'Condition' => array('IpAddress' => array('aws:SourceIp' => array($ip_address))));
 
-    $response = $this->cloudSearchInstance->update_service_access_policies($this->domainName, json_encode($options));
+    try {
+      watchdog('search_api_amazon_cloudsearch', 'Updating access policy for %domain.',
+        array('%domain' => $this->domainName), WATCHDOG_DEBUG);
 
-    return AWSCloudSearchHelper::checkAndReport(t('Add ip to access policy'), $response, FALSE);
+      $response = $this->cloudSearchInstance->updateServiceAccessPolicies(array(
+        'DomainName' => $this->domainName,
+        'AccessPolicies' => json_encode($options),
+      )
+      );
+    }
+    catch (Exception $e) {
+      watchdog('search_api_amazon_cloudsearch', 'Failed to update service access policy for %domain. Error: %error',
+        array('%domain' => $this->domainName, '%error' => $e), WATCHDOG_ERROR);
+      return FALSE;
+    }
+
+    return TRUE;
   }
 
   /**

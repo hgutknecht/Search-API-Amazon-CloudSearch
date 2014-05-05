@@ -1,8 +1,12 @@
-name = Search API Amazon CloudSearch 
+name = Search API Amazon CloudSearch
 description = Offers an implementation of the Search API that uses an Amazon AWS CloudSearch server for indexing content.
+core = 7.x
+configure = admin/config/search/search_api_amazon_cloudsearch/settings
+
+
 dependencies[] = facetapi
 dependencies[] = search_api
-dependencies[] = awssdk
+dependencies[] = libraries (2.x)
 package = Search
 core = 7.x
 

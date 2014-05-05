@@ -14,75 +14,21 @@ class AWSCloudSearchHelper {
    * Given security credentials and AWS region.
    */
   public static function getAWSCloudSearchInstance($key, $secret, $region) {
-    libraries_load('awssdk');
-    $search = new AmazonCloudSearch(self::buildAWSCredentials($key, $secret));
-    $search->set_region($region);
-    return $search;
-  }
-
-
-  /**
-   * Builds the credential array required by the AWS API.
-   *
-   * @todo Possibly look at softening the default_cache_config setting
-   */
-  public static function buildAWSCredentials($key, $secret) {
-    $credentials = array();
-    $credentials['certificate_authority'] = FALSE;
-    $credentials['key'] = $key;
-    $credentials['secret'] = $secret;
-    $credentials['default_cache_config'] = 'APC';
-    return $credentials;
-  }
-
-
-  /**
-   * Gets all applicable regions for AWS EC2 instances.
-   *
-   * At present this is the only way
-   * to get a list of regions via the API.
-   */
-  public static function getAWSRegions($key, $secret) {
-    libraries_load('awssdk');
-    // Have to use the EC2 class for this.
-    $ec2 = new AmazonEC2(buildAWSCredentials($key, $secret));
-    $response = $ec2->describe_regions();
-    if (!$response->isOK()) {
-      return NULL;
+    $library = libraries_load('awssdk2');
+    if (!$library['loaded']) {
+      throw new Exception(t('Unable to load the AWS SDK. Please ensure that the awssdk2 library is installed correctly.'));
     }
-    return $response->body->regionInfo;
-  }
+    elseif (!class_exists('Aws\S3\S3Client')) {
+      throw new Exception(t('Cannot load Aws\S3\S3Client class. Please ensure that the awssdk2 library is installed correctly.'));
+    }
 
-  /**
-   * Extracts error message from AWS response object.
-   */
-  public static function getAWSError($response) {
-    if (!isset($response->body->Error->Message)) {
-      return t('Failed to get AWS error message');
-    }
-    else {
-      return $response->body->Error->Message;
-    }
-  }
+    $client = Aws\CloudSearch\CloudSearchClient::factory(array(
+      'key' => $key,
+      'secret' => $secret,
+      'region'  => $region
+      )
+    );
 
-  /**
-   * Check response and report if it contains an error.
-   */
-  public static function checkAndReport($context, $response, $throw_exception = FALSE) {
-    libraries_load('awssdk');
-    if (!$response->isOK()) {
-      $aws_msg = self::getAWSError($response);
-      $msg = t('CloudSearch request failed:') . ' ' . t('Context') . ': ' . $context . ', ' . t('Message') . ': ' . $aws_msg;
-      drupal_set_message(check_plain($msg), 'error');
-      watchdog('aws_cloudsearch', $msg, NULL, WATCHDOG_CRITICAL, $link = NULL);
-      if ($throw_exception) {
-        throw new Exception($msg);
-      }
-      return FALSE;
-    }
-    else {
-      return TRUE;
-    }
+    return $client;
   }
-
 }

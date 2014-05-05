@@ -19,6 +19,30 @@ function search_api_amazon_cloudsearch_search_api_service_info() {
 }
 
 /**
+ * Implements hook_libraries_info()
+ */
+function search_api_amazon_cloudsearch_libraries_info() {
+  return array(
+    'awssdk2' => array(
+      'title' => 'AWS SDK for PHP 2',
+      'vendor url' => 'http://docs.aws.amazon.com/aws-sdk-php/guide/latest/index.html',
+      'download url' => 'https://github.com/aws/aws-sdk-php/releases/download/2.4.10/aws.zip',
+      'version arguments' => array(
+        'file' => 'Aws/Common/Aws.php',
+        'pattern' => "/const VERSION = '(.*)';/",
+        'lines' => 200,
+      ),
+      'files' => array(
+        'php' => array(
+          'aws-autoloader.php',
+        ),
+      ),
+    ),
+  );
+}
+
+
+/**
  * Implements hook_menu().
  */
 function search_api_amazon_cloudsearch_menu() {
