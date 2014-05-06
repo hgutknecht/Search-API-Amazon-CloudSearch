@@ -25,6 +25,7 @@ class AWSCloudSearchDomain {
 
   /**
    * Constructor.
+
    */
   public function __construct($options, $index_machine_name) {
     $this->serverOptions = $options;
@@ -67,10 +68,9 @@ class AWSCloudSearchDomain {
       drupal_set_message(check_plain($msg), 'error');
       watchdog('search_api_amazon_cloudsearch', $msg, NULL, WATCHDOG_CRITICAL, $link = NULL);
 
-      return FALSE;
+      return false;
     }
   }
-
 
   /**
    * Checks to see if the domain is currently active.
@@ -82,14 +82,14 @@ class AWSCloudSearchDomain {
    */
   public function isActive() {
     $details = $this->getDomainDetails();
-    if ($details->Processing == 'true') {
-      return FALSE;
+    if ($details['Processing'] == 'true') {
+      return false;
     }
-    elseif ($details->member->RequiresIndexDocuments == 'true') {
-      return FALSE;
+    elseif ($details['RequiresIndexDocuments'] == 'true') {
+      return false;
     }
     else {
-      return TRUE;
+      return true;
     }
   }
 
@@ -107,10 +107,10 @@ class AWSCloudSearchDomain {
   public function getStatus() {
     $details = $this->getDomainDetails();
 
-    if ($details->Processing == 'true') {
+    if ($details['Processing'] == 'true') {
       return 'PROCESSING';
     }
-    elseif ($details->RequiresIndexDocuments == 'true') {
+    elseif ($details['RequiresIndexDocuments'] == 'true') {
       return 'REQUIRES INDEXING';
     }
     else {
@@ -147,7 +147,7 @@ class AWSCloudSearchDomain {
    * @return bool
    *   If the add index request worked.
    */
-  protected function addIndex($index_field, $index_type, $facet, $result, $searchable, $source_field = NULL, $skip_encode = FALSE) {
+  protected function addIndex($index_field, $index_type, $facet, $result, $searchable, $source_field = NULL, $skip_encode = false) {
     if (!$skip_encode) {
       $index_field = self::encodeIndexName($this->indexMachineName, $index_field);
     }
@@ -162,8 +162,8 @@ class AWSCloudSearchDomain {
     switch ($index_type) {
       case "text":
         $options['TextOptions'] = array(
-          'FacetEnabled' => $facet == TRUE ? "true" : "false",
-          'ResultEnabled' => $result == TRUE ? "true" : "false",);
+          'FacetEnabled' => $facet == true ? true : false,
+          'ResultEnabled' => $result == true ? true : false,);
         break;
 
       case "uint":
@@ -172,9 +172,9 @@ class AWSCloudSearchDomain {
 
       case "literal":
         $options['LiteralOptions'] = array(
-          'FacetEnabled' => $facet == TRUE ? "true" : "false",
-          'ResultEnabled' => $result == TRUE ? "true" : "false",
-          'SearchEnabled' => $searchable == TRUE ? "true" : "false",);
+          'FacetEnabled' => $facet == true ? true : false,
+          'ResultEnabled' => $result == true ? true : false,
+          'SearchEnabled' => $searchable == true ? true : false,);
         break;
 
       default:
@@ -186,20 +186,37 @@ class AWSCloudSearchDomain {
      * value from the field specificed in $source_field.
      */
     if ($source_field != NULL) {
-      $options['SourceAttributes'] = array(array('SourceDataFunction' => 'Copy', 'SourceDataCopy' => array('SourceName' => $source_field)));
+      $options['SourceAttributes'] = array(array(
+        'SourceDataFunction' => 'Copy',
+        'SourceDataCopy' => array('SourceName' => $source_field),
+      )
+      );
     }
+
+    watchdog('search_api_amazon_cloudsearch',
+      'Defining new CloudSearch index field %fieldname on %domain with options: %options',
+      array(
+        '%fieldname' => $index_fields,
+        '%domain' => $this->domainName,
+        '%options' => print_r($options, true), WATCHDOG_DEBUG
+      )
+    );
 
     try {
-      $response = $this->cloudSearchInstance->defineIndexField($this->domainName, $options);
+      $response = $this->cloudSearchInstance->defineIndexField(array(
+        'DomainName' => $this->domainName,
+        'IndexField' => $options,
+      )
+      );
     }
-
     catch (Exception $e) {
       watchdog('search_api_amazon_cloudsearch', 'Failed to add index %index for: %domain. Error: %error',
         array('%domain' => $this->domainName, '%error' => $e, '%index' => $index_field), WATCHDOG_ERROR);
-      return FALSE;
+
+      return false;
     }
 
-    return TRUE;
+    return true;
   }
 
   /**
@@ -215,15 +232,19 @@ class AWSCloudSearchDomain {
     $index_field = self::encodeIndexName($this->indexMachineName, $index_field);
 
     try {
-        $response = $this->cloudSearchInstance->deleteIndexField($this->domainName, $index_field);
+      $response = $this->cloudSearchInstance->deleteIndexField(array(
+        'DomainName' => $this->domainName,
+        'IndexFieldName' => $index_field,
+      )
+      );
     }
     catch (Exception $e) {
       watchdog('search_api_amazon_cloudsearch', 'Remove index %index failed for: %domain. Error: %error',
         array('%domain' => $this->domainName, '%error' => $e, '%index' => $index_field), WATCHDOG_ERROR);
-      return FALSE;
+      return false;
     }
 
-    return TRUE;
+    return true;
   }
 
   /**
@@ -233,7 +254,20 @@ class AWSCloudSearchDomain {
    *   All the index(field) information from the domain(index)
    */
   public function getIndexes() {
-    return $this->cloudSearchInstance->describeIndexFields($this->domainName);
+    try {
+      $response = $this->cloudSearchInstance->describeIndexFields(array(
+        'DomainName' => $this->domainName,
+      )
+      );
+    }
+    catch (Exception $e) {
+      watchdog('search_api_amazon_cloudsearch', 'Index document request failed for: %domain. Error: %error',
+        array('%domain' => $this->domainName, '%error' => $e), WATCHDOG_ERROR);
+
+      return false;
+    }
+
+    return $response['IndexFields'];
   }
 
   /**
@@ -246,17 +280,20 @@ class AWSCloudSearchDomain {
    */
   protected function indexDocuments() {
     try {
-      $response = $this->cloudSearchInstance->indexDocuments($this->domainName);
+      $response = $this->cloudSearchInstance->indexDocuments(array(
+        'DomainName' => $this->domainName,
+      )
+      );
     }
     catch (Exception $e) {
       watchdog('search_api_amazon_cloudsearch', 'Index document request failed for: %domain. Error: %error',
         array('%domain' => $this->domainName, '%error' => $e), WATCHDOG_ERROR);
+
       return false;
     }
 
     return true;
   }
-
 
   /**
    * Updates any modified CloudSearch indexes given the provided index.
@@ -277,21 +314,22 @@ class AWSCloudSearchDomain {
     // Populate an array of existing fields to remove any indexes.
     $delete_fields = array();
 
-    $found_index_document_field = FALSE;
+    $found_index_document_field = false;
 
     /* Get the indexes out of CloudSearch and check them against
      * the modified ones in Drupal.
      */
     $search_api_fields = $index->getFields();
     $current_cs_indexes = $this->getIndexes();
-    foreach ($current_cs_indexes['IndexFields'] as $cs_index) {
+
+    foreach ($current_cs_indexes as $cs_index) {
       // Only look at fields that are for this index.
       if ($this->startsWith($cs_index['Options']['IndexFieldName'], $this->indexMachineName . '_')) {
         $field_name = self::decodeIndexName($this->indexMachineName, $cs_index['Options']['IndexFieldName']);
-        $found = FALSE;
+        $found = false;
         foreach ($search_api_fields as $field => $info) {
           if ($field == $field_name || 'sort_' . $field == $field_name) {
-            $found = TRUE;
+            $found = true;
           }
         }
         if (!$found) {
@@ -299,8 +337,8 @@ class AWSCloudSearchDomain {
         }
       }
 
-      if ($cs_index->Options->IndexFieldName == 'search_api_document_index_machine_name') {
-        $found_index_document_field = TRUE;
+      if ($cs_index['Options']['IndexFieldName'] == 'search_api_document_index_machine_name') {
+        $found_index_document_field = true;
       }
     }
 
@@ -314,7 +352,7 @@ class AWSCloudSearchDomain {
      * against this document
      */
     if (!$found_index_document_field) {
-      $this->addIndex('search_api_document_index_machine_name', 'literal', TRUE, FALSE, TRUE, NULL, TRUE);
+      $this->addIndex('search_api_document_index_machine_name', 'literal', true, false, true, NULL, true);
       $new_updated_count++;
     }
 
@@ -325,9 +363,12 @@ class AWSCloudSearchDomain {
       /* Only do something with this field if it differs from the
        * cloudsearch index in anyway.
        */
+      watchdog('search_api_amazon_cloudsearch', 'Comparing %fieldname to CloudSearch index',
+        array('%fieldname' => $name), WATCHDOG_DEBUG);
+
       $is_modified = $this->checkFieldChanged($name, $field_info, $current_cs_indexes);
 
-      if ($is_modified == TRUE) {
+      if ($is_modified == true) {
         $cs_index_data = $this->searchAPIFieldToCloudSearch($name, $field_info);
 
         // Localise return fields for brevity.
@@ -371,7 +412,7 @@ class AWSCloudSearchDomain {
       return $this->indexDocuments();
     }
     else {
-      return TRUE;
+      return true;
     }
   }
 
@@ -395,44 +436,44 @@ class AWSCloudSearchDomain {
 
         $cs_index_data = $this->searchAPIFieldToCloudSearch($name, $field);
         $index_type = $cs_index_data['index_type'];
-        $facet = $cs_index_data['facet'] == TRUE ? "true" : "false";
-        $searchable = $cs_index_data['searchable'] == TRUE ? "true" : "false";
+        $facet = $cs_index_data['facet'] == true ? true : false;
+        $searchable = $cs_index_data['searchable'] == true ? true : false;
         $source_fields = $cs_index_data['source_fields'];
 
         // If this field should have a sort field then check it has.
         if ($cs_index_data['has_sort_field']) {
-          $found = FALSE;
+          $found = false;
           foreach ($cs_fields as $index_a) {
             $field_name_a = self::decodeIndexName($this->indexMachineName, $index_a['Options']['IndexFieldName']);
             foreach ($source_fields as $sorce_field) {
               if ($field_name_a == $sorce_field['name']) {
-                $found = TRUE;
+                $found = true;
               }
             }
           }
           if (!$found) {
-            return TRUE;
+            return true;
           }
         }
 
-        if ((string) $index->Options['IndexFieldType'] != $index_type) {
-          return TRUE;
+        if ((string) $index['Options']['IndexFieldType'] != $index_type) {
+          return true;
         }
         if ($index_type == 'literal') {
           if ((string) $index['Options']['LiteralOptions']['FacetEnabled'] != $facet) {
-            return TRUE;
+            return true;
 
           }
           if ((string) $index['Options']['LiteralOptions']['SearchEnabled'] != $searchable) {
-            return TRUE;
+            return true;
 
           }
         }
-        return FALSE;
+        return false;
       }
     }
     // If field not found then it's effectively modified.
-    return TRUE;
+    return true;
 
   }
 
@@ -462,12 +503,12 @@ class AWSCloudSearchDomain {
     $is_facet = $this->isFieldFacet($name);
 
     // Setup default return items.
-    $return_data['sortable'] = FALSE;
+    $return_data['sortable'] = false;
     $return_data['facet'] = $is_facet;
     $return_data['result'] = !$is_facet;
-    $return_data['ranges'] = FALSE;
-    $return_data['searchable'] = TRUE;
-    $return_data['has_sort_field'] = FALSE;
+    $return_data['ranges'] = false;
+    $return_data['searchable'] = true;
+    $return_data['has_sort_field'] = false;
 
     /* Create an array to hold any additional source fields
      * required because of restrictions in the configuration
@@ -477,10 +518,10 @@ class AWSCloudSearchDomain {
     $return_data['source_fields'] = array();
 
     if (!empty($this->serverOptions['index_options'][$this->indexMachineName]['sorts'][$name])) {
-      $return_data['sortable'] = TRUE;
+      $return_data['sortable'] = true;
     }
     if (!empty($this->serverOptions['index_options'][$this->indexMachineName]['ranges'][$name])) {
-      $return_data['ranges'] = TRUE;
+      $return_data['ranges'] = true;
     }
 
     // Convert Search API type into CloudSearch type (uint, literal, text).
@@ -490,7 +531,7 @@ class AWSCloudSearchDomain {
         break;
 
       case "date":
-        $return_data['index_type'] = $return_data['facet'] == TRUE ? 'literal' : 'uint';
+        $return_data['index_type'] = $return_data['facet'] == true ? 'literal' : 'uint';
         break;
 
       case "text":
@@ -498,11 +539,11 @@ class AWSCloudSearchDomain {
         break;
 
       case "boolean":
-        $return_data['index_type'] = $return_data['facet'] == TRUE ? 'literal' : 'uint';
+        $return_data['index_type'] = $return_data['facet'] == true ? 'literal' : 'uint';
         break;
 
       case "integer":
-        $return_data['index_type'] = $return_data['facet'] == TRUE ? 'literal' : 'uint';
+        $return_data['index_type'] = $return_data['facet'] == true ? 'literal' : 'uint';
         break;
 
       case "decimal":
@@ -514,7 +555,7 @@ class AWSCloudSearchDomain {
         break;
     }
 
-    if (($return_data['sortable'] == TRUE || $return_data['ranges'] == TRUE) && $return_data['facet'] == TRUE) {
+    if (($return_data['sortable'] == true || $return_data['ranges'] == true) && $return_data['facet'] == true) {
       /* CloudSearch text and literal indexes cannot be both
        * sortable and faceted so need to create a new source
        * field.  If the field is a decimal then conver to uint
@@ -527,12 +568,12 @@ class AWSCloudSearchDomain {
       $return_data['source_fields'][] = array(
         'name' => 'sort_' . $name,
         'index_type' => self::isNumericFieldType($field_info['type']) ? 'uint' : $return_data['index_type'],
-        'result' => TRUE,
+        'result' => true,
         'faceted' => $return_data['ranges'],
-        'searchable' => FALSE,
+        'searchable' => false,
       );
 
-      $return_data['has_sort_field'] = TRUE;
+      $return_data['has_sort_field'] = true;
     }
 
     return $return_data;
@@ -561,8 +602,6 @@ class AWSCloudSearchDomain {
    *
    * Converts the items into Json SDF documents and
    * submits to Document endpoint.
-   *
-   * @todo need to return FALSE if error occured and log in watchdog
    */
   public function updateDocuments($items) {
     $json = array();
@@ -639,10 +678,14 @@ class AWSCloudSearchDomain {
 
     // Encode the SDF array and post to CloudSearch Document endpoint.
     $status = $this->submitJsonRequest(json_encode($json));
-    return TRUE;
 
+    if (!$status) {
+      watchdog('search_api_amazon_cloudsearch', 'Failed to update update CloudSearch documents: %json',
+        array('%json' => $json), WATCHDOG_ERROR);
+    }
+
+    return true;
   }
-
 
   /**
    * Removes documents from CloudSearch.
@@ -667,6 +710,12 @@ class AWSCloudSearchDomain {
     // Encode the SDF document array and post to Document endpoint.
     $this->submitJsonRequest(json_encode($json));
 
+    if (!$status) {
+      watchdog('search_api_amazon_cloudsearch', 'Failed to remove documents from CloudSearch: %json.',
+        array('%json' => $json), WATCHDOG_ERROR);
+    }
+
+    return true;
   }
 
   /**
@@ -690,12 +739,19 @@ class AWSCloudSearchDomain {
       );
     }
     catch (Exception $e) {
-      watchdog('search_api_amazon_cloudsearch', 'Failed to update service access policy for %domain. Error: %error',
+      watchdog('search_api_amazon_cloudsearch', 'Failed to retrieve service access policy for %domain. Error: %error',
         array('%domain' => $this->domainName, '%error' => $e), WATCHDOG_ERROR);
-      return FALSE;
+
+      return false;
     }
-    
-    $options = json_decode($response['AccessPolicies']['Options']);
+
+    if (gettype($response['AccessPolicies']['Options']) == 'string') {
+      $options = json_decode($response['AccessPolicies']['Options']);
+    }
+    else {
+      $options = array();
+    }
+
 
     // Build up IAM Json document for doc and search endpoint.
     $options->Statement[] = array(
@@ -717,16 +773,20 @@ class AWSCloudSearchDomain {
     catch (Exception $e) {
       watchdog('search_api_amazon_cloudsearch', 'Failed to update service access policy for %domain. Error: %error',
         array('%domain' => $this->domainName, '%error' => $e), WATCHDOG_ERROR);
-      return FALSE;
+
+      return false;
     }
 
-    return TRUE;
+    return true;
   }
 
   /**
    * Helper - Submits SDF Json document(s) to document endpoint.
    */
   protected function submitJsonRequest($json) {
+    watchdog('search_api_amazon_cloudsearch', 'Making json request to %url with data: %json.',
+      array('%url' => 'http://' . $this->domainDocEndpoint . $this->documentBatchAction, '%json' => $json), WATCHDOG_DEBUG);
+
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, 'http://' . $this->domainDocEndpoint . $this->documentBatchAction);
     curl_setopt($ch, CURLOPT_HEADER, 0);
@@ -738,7 +798,15 @@ class AWSCloudSearchDomain {
     $response = curl_exec($ch);
     $status = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
-    return $status;
+
+    if ($status != 200) {
+      watchdog('search_api_amazon_cloudsearch', 'Received status HTTP %status from CloudWatch API. Response: %response',
+        array('%status' => $status, '%response' => $response), WATCHDOG_ERROR);
+
+      return false;
+    }
+
+    return true;
   }
 
   /**

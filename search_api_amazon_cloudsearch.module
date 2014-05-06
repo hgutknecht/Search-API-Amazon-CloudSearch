@@ -73,7 +73,7 @@ function search_api_amazon_cloudsearch_menu_access($index) {
 
   // Check to make sure this index is using the CloudSearch server class.
   if ($server == NULL || $server->class != 'search_api_cloudsearch_service') {
-    return FALSE;
+    return false;
   }
   else {
     return user_access('administer') && user_access('search_api');

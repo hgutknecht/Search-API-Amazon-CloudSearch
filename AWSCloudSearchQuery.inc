@@ -367,7 +367,7 @@ class AWSCloudSearchQuery {
           unset($keys[$i]);
         }
         else {
-          $words[$word] = TRUE;
+          $words[$word] = true;
         }
       }
       else {

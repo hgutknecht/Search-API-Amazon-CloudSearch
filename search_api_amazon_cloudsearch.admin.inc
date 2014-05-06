@@ -73,7 +73,7 @@ function search_api_amazon_cloudsearch_index_setup($form, &$form_state, SearchAp
     '#type' => 'checkboxes',
     '#title' => t('Sortable fields'),
     '#options' => $fields,
-    '#multiple' => TRUE,
+    '#multiple' => true,
     '#default_value' => !empty($options['index_options'][$index->machine_name]['sorts']) ? $options['index_options'][$index->machine_name]['sorts'] : array(),
     '#size' => 8,
   );
@@ -82,7 +82,7 @@ function search_api_amazon_cloudsearch_index_setup($form, &$form_state, SearchAp
     '#type' => 'checkboxes',
     '#title' => t('Rangable fields'),
     '#options' => $range_fields,
-    '#multiple' => TRUE,
+    '#multiple' => true,
     '#default_value' => !empty($options['index_options'][$index->machine_name]['sorts']) ? $options['index_options'][$index->machine_name]['ranges'] : array(),
     '#size' => 8,
   );
