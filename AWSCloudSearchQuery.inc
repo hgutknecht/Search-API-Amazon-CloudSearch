@@ -27,6 +27,9 @@ class AWSCloudSearchQuery {
    * Sets up Facets and returns the Ids.
    */
   public function execute(SearchApiQueryInterface $search_api_query) {
+    watchdog('search_api_amazon_cloudsearch', 'Executing search query: %query',
+      array('%query' => $search_api_query), WATCHDOG_DEBUG);
+
     $query_options = $search_api_query->GetOptions();
     $this->indexMachineName = $search_api_query->getIndex()->machine_name;
     $this->query = $search_api_query;
