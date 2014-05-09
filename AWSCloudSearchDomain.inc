@@ -166,7 +166,7 @@ class AWSCloudSearchDomain {
           'ResultEnabled' => $result == true ? true : false,);
         break;
 
-      case "uint":
+      case "int":
         // Here for completeness but we leave uint with it's default options.
         break;
 
@@ -196,7 +196,7 @@ class AWSCloudSearchDomain {
     watchdog('search_api_amazon_cloudsearch',
       'Defining new CloudSearch index field %fieldname on %domain with options: %options',
       array(
-        '%fieldname' => $index_fields,
+        '%fieldname' => $index_field,
         '%domain' => $this->domainName,
         '%options' => print_r($options, true), WATCHDOG_DEBUG
       )
@@ -499,6 +499,8 @@ class AWSCloudSearchDomain {
    */
   public function searchAPIFieldToCloudSearch($name, $field_info) {
     $return_data = array();
+    watchdog('search_api_amazon_cloudsearch', 'Translating SearchAPI field type to CloudSearch type for %name with type: %type',
+      array('%name' => $name, '%type' => $field_info['type']), WATCHDOG_DEBUG);
 
     $is_facet = $this->isFieldFacet($name);
 
@@ -524,14 +526,14 @@ class AWSCloudSearchDomain {
       $return_data['ranges'] = true;
     }
 
-    // Convert Search API type into CloudSearch type (uint, literal, text).
+    // Convert Search API type into CloudSearch type (int, literal, text).
     switch ($field_info['type']) {
       case "string":
         $return_data['index_type'] = 'literal';
         break;
 
       case "date":
-        $return_data['index_type'] = $return_data['facet'] == true ? 'literal' : 'uint';
+        $return_data['index_type'] = $return_data['facet'] == true ? 'literal' : 'int';
         break;
 
       case "text":
@@ -539,15 +541,23 @@ class AWSCloudSearchDomain {
         break;
 
       case "boolean":
-        $return_data['index_type'] = $return_data['facet'] == true ? 'literal' : 'uint';
+        $return_data['index_type'] = $return_data['facet'] == true ? 'literal' : 'int';
         break;
 
       case "integer":
-        $return_data['index_type'] = $return_data['facet'] == true ? 'literal' : 'uint';
+        $return_data['index_type'] = $return_data['facet'] == true ? 'literal' : 'int';
         break;
 
       case "decimal":
         $return_data['index_type'] = 'literal';
+        break;
+
+      case "list<text>":
+        $return_data['index_type'] = 'text-array';
+        break;
+
+      case "list<integer>":
+        $return_data['index_type'] = 'int-array';
         break;
 
       default:
@@ -638,6 +648,7 @@ class AWSCloudSearchDomain {
             /* If this is a multi-valued item. Just associate the array
              * with the field values.
              */
+
             foreach ($value['value'] as $val) {
               $values[$name][] = $val;
             }
@@ -669,8 +680,6 @@ class AWSCloudSearchDomain {
       $json[] = array(
         'type' => 'add',
         'id' => self::createId($this->indexMachineName, $key),
-        'version' => time(),
-        'lang' => 'en',
         'fields' => $values,
       );
 
@@ -680,8 +689,8 @@ class AWSCloudSearchDomain {
     $status = $this->submitJsonRequest(json_encode($json));
 
     if (!$status) {
-      watchdog('search_api_amazon_cloudsearch', 'Failed to update update CloudSearch documents: %json',
-        array('%json' => $json), WATCHDOG_ERROR);
+      watchdog('search_api_amazon_cloudsearch', 'Failed to update update CloudSearch documents.',
+        array(), WATCHDOG_ERROR);
     }
 
     return true;
@@ -784,8 +793,8 @@ class AWSCloudSearchDomain {
    * Helper - Submits SDF Json document(s) to document endpoint.
    */
   protected function submitJsonRequest($json) {
-    watchdog('search_api_amazon_cloudsearch', 'Making json request to %url with data: %json.',
-      array('%url' => 'http://' . $this->domainDocEndpoint . $this->documentBatchAction, '%json' => $json), WATCHDOG_DEBUG);
+    watchdog('search_api_amazon_cloudsearch', 'Making json request to %url.',
+      array('%url' => 'http://' . $this->domainDocEndpoint . $this->documentBatchAction), WATCHDOG_DEBUG);
 
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, 'http://' . $this->domainDocEndpoint . $this->documentBatchAction);
