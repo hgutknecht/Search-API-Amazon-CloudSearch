@@ -80,21 +80,6 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
       );
     }
 
-    $form['instance_name'] = array(
-      '#type'  => 'textfield',
-      '#title'  => t('Search instance name'),
-      '#required' => true,
-      '#maxlength' => 28,
-      '#default_value' => empty($this->options) ? '' : $this->options['instance_name'],
-    );
-
-    $form['cross_site_search'] = array(
-      '#type'  => 'checkbox',
-      '#title'  => t('Enable cross site search?'),
-      '#description' => t('Checking this will enable searching across all documents stored in the search domain'),
-      '#default_value' => empty($this->options) ? '' : $this->options['cross_site_search'],
-    );
-
     $form['cloudsearch_api_version'] = array(
       '#type'  => 'textfield',
       '#title'  => t('API Version'),
@@ -197,8 +182,8 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
         form_error($form['domain_name'], t('Search domain not found, please check your details and try again.  If you want to create a new domain then tick the Create new domain checkbox.'));
       }
       else {
-        $form_state['storage']['search_endpoint'] = (string) $response['DomainStatusList']['SearchService']['Endpoint'];
-        $form_state['storage']['document_endpoint'] = (string) $response['DomainStatusList']['DocService']['Endpoint'];
+        $form_state['storage']['search_endpoint'] = (string) $response['DomainStatusList'][0]['SearchService']['Endpoint'];
+        $form_state['storage']['document_endpoint'] = (string) $response['DomainStatusList'][0]['DocService']['Endpoint'];
       }
     }
   }

@@ -27,8 +27,8 @@ class AWSCloudSearchQuery {
    * Sets up Facets and returns the Ids.
    */
   public function execute(SearchApiQueryInterface $search_api_query) {
-    watchdog('search_api_amazon_cloudsearch', 'Executing search query: %query',
-      array('%query' => $search_api_query), WATCHDOG_DEBUG);
+    watchdog('search_api_amazon_cloudsearch', 'Executing search query',
+      array(), WATCHDOG_DEBUG);
 
     $query_options = $search_api_query->GetOptions();
     $this->indexMachineName = $search_api_query->getIndex()->machine_name;
@@ -40,7 +40,7 @@ class AWSCloudSearchQuery {
     /* Construct the CloudSearch querystring
     * Params are:
     *   q             - general keyword search, searches all searchable fields
-    *   bq            - complex search query, search on multple fields
+    *   q_filter      - complex search query filters, search on multple fields
     *                   controled by parentheses
     *   return-fields - what fields to return
     *   facet         - what facets to calculate and return back
@@ -54,14 +54,18 @@ class AWSCloudSearchQuery {
     $currentpage = "&start={$query_options['offset']}";
 
     // Standard keyword search.
+    $structured = false;
     $keys = $this->combineKeys($this->prepareKeys($search_api_query->getKeys()));
     $q = $keys == '' ? 'q=%' : "q={$keys}";
+
+    // Always add a facet to limit searches to this site only
+    $site_facet = "facet.search_api_document_index_machine_name={buckets:['$this->indexMachineName']}";
 
     /* Return values, this is pretty simple in SearchAPI,
      * it only requires the item ID, we add text_relevance to
      * give Search API a score for this result for the default ordering
      */
-    $rtn = "return-fields=text_relevance";
+    $rtn = "return=_score";
 
     // Add facets (if applicable).
     $facets = array();
@@ -77,15 +81,18 @@ class AWSCloudSearchQuery {
       $f = trim($f, ', ');
     }
 
-    /* Active filters (BQ).  These filters will come from the
-     * facets or from the View filters.
-     */
-    $bq = "bq=(and search_api_document_index_machine_name:'$this->indexMachineName' ";
+    // Active filters (q_filter).  These filters will come from the
+    // facets or from the View filters. If they exist, we need to
+    // modify the query to be "structured"
     $filters = $search_api_query->getFilter();
     if (count($filters->getFilters()) > 0) {
-      $this->createFilterCondition($filters, 0, $bq);
+      $structured = true;
+
+      $q .= "(and (term {$keys}) ";
+      $this->createFilterCondition($filters, 0, $q);
+      $q .= ')';
     }
-    $bq .= ' ) ';
+
 
     /* Sort.  If no sort specified CloudSearch will default to
      * text-relevance field.
@@ -110,7 +117,11 @@ class AWSCloudSearchQuery {
     }
 
     // Combine into CloudSearch query string.
-    $query_params = "{$q}&{$bq}&{$rtn}&{$f}{$r}{$page_size}{$currentpage}";
+    $query_params = "{$q}&{$site_facet}{$f}{$r}&{$rtn}{$page_size}{$currentpage}";
+
+    if ($structured) {
+      $query_params .= '&q.parser=structured';
+    }
 
     // Send query to CloudSearch endpoint.
     $response = json_decode($this->submitSearch($query_params));
@@ -118,12 +129,16 @@ class AWSCloudSearchQuery {
     // Check response and report if in error.
     if ($response == NULL) {
       drupal_set_message(check_plain(t('Critial failure when calling CloudSearch')), 'error');
-      watchdog('aws_cloudsearch', 'Critial failure when calling CloudSearch. Request was: %query_string', array('%query_string' => $query_params), WATCHDOG_CRITICAL, $link = NULL);
+      watchdog('aws_cloudsearch', 'Critial failure when calling CloudSearch. Request was: %query_string',
+        array('%query_string' => $query_params), WATCHDOG_CRITICAL, $link = NULL);
+
       return array();
     }
     elseif (isset($response->error)) {
-      drupal_set_message(check_plain(t('CloudSearch returned an error:') . $response->messages[0]->message), 'error');
-      watchdog('aws_cloudsearch', 'CloudSearch returned an error. Error was %error_message | Request was: %query_string', array('%query_string' => $query_params, '%error_message' => $response->messages[0]->message), WATCHDOG_CRITICAL, $link = NULL);
+      drupal_set_message(check_plain(t('CloudSearch returned an error:') . $response->error->message), 'error');
+      watchdog('aws_cloudsearch', 'CloudSearch returned an error. Error was %error_message | Request was: %query_string',
+        array('%query_string' => $query_params, '%error_message' => $response->error->message), WATCHDOG_CRITICAL, $link = NULL);
+
       return array();
     }
 
@@ -131,12 +146,13 @@ class AWSCloudSearchQuery {
      * array and hand back to SearchAPI.
      */
     $results = array();
+    $results['results'] = array();
     $results['result count'] = $response->hits->found;
     foreach ($response->hits->hit as $hit) {
       $id = str_replace("{$this->indexMachineName}_", '', $hit->id);
       $results['results'][$id] = array(
         'id' => $id,
-        'score' => $hit->data->text_relevance[0],
+        'score' => $hit->fields->_score,
       );
     }
 
@@ -161,7 +177,7 @@ class AWSCloudSearchQuery {
   }
 
   /**
-   * Helper - creates a CloudSearch filter (bq) string.
+   * Helper - creates a CloudSearch filter (q_filter) string.
    *
    * Given SearchAPI filter object. CloudSearch queries
    * use parentheses to group searches and the conjunction
@@ -169,8 +185,8 @@ class AWSCloudSearchQuery {
    *
    * Example:  (AND field_1 field_2 (OR field_3 field 4))
    */
-  protected function createFilterCondition(SearchApiQueryFilterInterface $filter, $depth, &$bq = '') {
-    $bq .= '(' . drupal_strtolower($filter->GetConjunction()) . ' ';
+  protected function createFilterCondition(SearchApiQueryFilterInterface $filter, $depth, &$q_filter = '') {
+    $q_filter .= '(' . drupal_strtolower($filter->GetConjunction()) . ' ';
     foreach ($filter->getFilters() as $f) {
       if (is_array($f)) {
         $val = $this->getFinalFieldFilterValue($f);
@@ -179,11 +195,11 @@ class AWSCloudSearchQuery {
         // Setup condition based on operand.
         switch ($f[2]) {
           case "=":
-            $bq .= " {$fname}:{$val} ";
+            $q_filter .= " {$fname}:{$val} ";
             break;
 
           case "<>":
-            $bq .= " (not {$fname}:{$val}) ";
+            $q_filter .= " (not {$fname}:{$val}) ";
             break;
 
           case ">=":
@@ -192,12 +208,12 @@ class AWSCloudSearchQuery {
              * to all ranged queries.
              */
             $fname = $field_type != 'uint' ? $this->getSortFieldName($fname) : $fname;
-            $bq .= " {$fname}:{$f[1]}.. ";
+            $q_filter .= " {$fname}:{$f[1]}.. ";
             break;
 
           case "<=":
             $fname = $field_type != 'uint' ? $this->getSortFieldName($fname) : $fname;
-            $bq .= " {$fname}:0..{$f[1]} ";
+            $q_filter .= " {$fname}:0..{$f[1]} ";
             break;
 
           case ">":
@@ -206,7 +222,7 @@ class AWSCloudSearchQuery {
              */
             $fname = $field_type != 'uint' ? $this->getSortFieldName($fname) : $fname;
             $val = $f[1] + 1;
-            $bq .= " {$fname}:{$val}.. ";
+            $q_filter .= " {$fname}:{$val}.. ";
             break;
 
           case "<":
@@ -215,7 +231,7 @@ class AWSCloudSearchQuery {
              */
             $fname = $field_type != 'uint' ? $this->getSortFieldName($fname) : $fname;
             $val = $f[1] > 0 ? $f[1] - 1 : 0;
-            $bq .= " {$fname}:0..{$val} ";
+            $q_filter .= " {$fname}:0..{$val} ";
             break;
 
         }
@@ -223,11 +239,11 @@ class AWSCloudSearchQuery {
     }
     foreach ($filter->getFilters() as $f) {
       if (is_object($f)) {
-        $c = $this->createFilterCondition($f, $depth, $bq);
+        $c = $this->createFilterCondition($f, $depth, $q_filter);
       }
     }
     // Trailing space required.
-    $bq .= ') ';
+    $q_filter .= ') ';
   }
 
   /**

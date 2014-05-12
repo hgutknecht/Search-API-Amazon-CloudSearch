@@ -758,7 +758,7 @@ class AWSCloudSearchDomain {
       $options = json_decode($response['AccessPolicies']['Options']);
     }
     else {
-      $options = array();
+      $options = (object) array();
     }
 
 
