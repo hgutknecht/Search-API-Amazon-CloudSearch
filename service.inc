@@ -64,6 +64,20 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
         '#description' => t('Checking this will create the above domain in your CloudSearch account. Amazon will start charging by the hour as soon as the domain is loaded.  For full pricing details visit') . ' ' . l(t('Amazon CloudSearch Pricing'), 'http://aws.amazon.com/cloudsearch/pricing/', array('attributes' => array('target' => '_blank'))),
       );
 
+      $form['shared_field_mode'] = array(
+        '#type'  => 'checkbox',
+        '#title'  => t('Enabled shared field mode?'),
+        '#description' => t('Enabling shared field mode makes CloudSearch use the shared field site name as a search facet instead of the index name. This setting may not be changed later.'),
+      );
+
+      $form['shared_field_site_name'] = array(
+        '#type'  => 'textfield',
+        '#title'  => t('Shared field site name'),
+        '#required' => false,
+        '#description' => t('The site name to use for filtering search results. Required if shared field mode is enabled. This setting may not be changed later.'),
+        '#default_value' => '',
+      );
+
       // Get servers ip for doc and search endpoint access policy setup.
       $local_ip_address = $this->getExternalIPAddress();
       if ($local_ip_address == "ERROR") {
@@ -78,6 +92,20 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
         '#maxlength' => 15,
         '#default_value' => $local_ip_address,
       );
+    }
+    else {
+      $form['shared_field_mode'] = array(
+        '#type'  => 'checkbox',
+        '#title'  => t('Enabled shared field mode?'),
+        '#disabled' => true,
+      );
+
+      $form['shared_field_site_name'] = array(
+        '#type'  => 'textfield',
+        '#title'  => t('Shared field site name'),
+        '#disabled' => true,
+      );
+
     }
 
     $form['cloudsearch_api_version'] = array(

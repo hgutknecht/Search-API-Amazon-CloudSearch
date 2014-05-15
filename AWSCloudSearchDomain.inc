@@ -21,6 +21,8 @@ class AWSCloudSearchDomain {
   protected $domainDocEndpoint;
   protected $documentBatchAction = '/{API_VERSION}/documents/batch';
   protected $indexMachineName;
+  protected $sharedFieldMode;
+  protected $sharedFieldSiteName;
   protected $serverOptions;
 
   /**
@@ -31,10 +33,17 @@ class AWSCloudSearchDomain {
     $this->serverOptions = $options;
     $this->domainName = $options['domain_name'];
     $this->indexMachineName = $index_machine_name;
+    $this->sharedFieldMode = !empty($options['shared_field_mode']) ? $options['shared_field_mode'] : false;
+    $this->sharedFieldSiteName = !empty($options['shared_field_site_name']) ? $options['shared_field_site_name'] : '';
     $this->documentBatchAction = str_replace('{API_VERSION}', $options['cloudsearch_api_version'], $this->documentBatchAction);
     $this->cloudSearchInstance = AWSCloudSearchHelper::getAWSCloudSearchInstance($options['aws_access_key'], $options['aws_secret_key'], $options['region']);
     if (!empty($options['document_endpoint'])) {
       $this->domainDocEndpoint = $options['document_endpoint'];
+    }
+
+    if ($this->sharedFieldMode) {
+      watchdog('search_api_amazon_cloudsearch', 'Shared field mode is enabled with site name: %site.',
+        array('%site' => $this->sharedFieldSiteName), WATCHDOG_DEBUG);
     }
   }
 
@@ -267,7 +276,18 @@ class AWSCloudSearchDomain {
       return false;
     }
 
-    return $response['IndexFields'];
+    // Strip out any fields that are pending deletion otherwise they will be
+    // treated as if they exist
+    $index_fields = array_filter(
+      $response['IndexFields'],
+      function($index_field) {
+        if (!$index_field['Status']['PendingDeletion']) {
+          return $index_field;
+        }
+      }
+    );
+
+    return $index_fields;
   }
 
   /**
@@ -323,7 +343,7 @@ class AWSCloudSearchDomain {
     $current_cs_indexes = $this->getIndexes();
 
     foreach ($current_cs_indexes as $cs_index) {
-      // Only look at fields that are for this index.
+      // Unless we are in "shared field mode", only look at fields that are for this index.
       if ($this->startsWith($cs_index['Options']['IndexFieldName'], $this->indexMachineName . '_')) {
         $field_name = self::decodeIndexName($this->indexMachineName, $cs_index['Options']['IndexFieldName']);
         $found = false;
@@ -620,8 +640,15 @@ class AWSCloudSearchDomain {
     foreach ($items as $key => $item) {
       // Values array holds all the fields for this item.
       $values = array();
-      // Add the standard document index machine name field to document.
-      $values['search_api_document_index_machine_name'] = $this->indexMachineName;
+
+      // Add the standard document index machine name field to document, unless
+      // shared_field_mode is enabled, in which case use the defined site name.
+      if ($this->sharedFieldMode) {
+        $values['search_api_document_index_machine_name'] = $this->sharedFieldSiteName;
+      }
+      else {
+        $values['search_api_document_index_machine_name'] = $this->indexMachineName;
+      }
 
       // Iterate through each field for this item and create JSON SDF doc.
       foreach ($item as $name => $value) {
@@ -717,7 +744,7 @@ class AWSCloudSearchDomain {
     }
 
     // Encode the SDF document array and post to Document endpoint.
-    $this->submitJsonRequest(json_encode($json));
+    $status = $this->submitJsonRequest(json_encode($json));
 
     if (!$status) {
       watchdog('search_api_amazon_cloudsearch', 'Failed to remove documents from CloudSearch: %json.',
