@@ -51,6 +51,16 @@ function search_api_amazon_cloudsearch_index_setup($form, &$form_state, SearchAp
     }
   }
 
+  // Get a list of content types to drive the exclude checkbox list and
+  // transform into an associative array
+  $content_types = array_reduce(
+    node_type_get_types(),
+    function($result, $ct) {
+      $result[$ct->type] = $ct->type;
+      return $result;
+    }
+  );
+
   $form['vtab'] = array(
     '#type' => 'vertical_tabs',
     '#title' => 'Amazon CloudSearch field configuration options',
@@ -115,6 +125,22 @@ function search_api_amazon_cloudsearch_index_setup($form, &$form_state, SearchAp
     '#size' => 8,
   );
 
+  $form['fieldset_exclude'] = array(
+    '#type' => 'fieldset',
+    '#group' => 'vtab',
+    '#title' => t('Excluded content'),
+    '#description' => t('Content types to exclude from indexing.'),
+  );
+
+  $form['fieldset_exclude']['excluded_content_types'] = array(
+    '#type' => 'checkboxes',
+    '#title' => t('Excluded content types'),
+    '#options' => $content_types,
+    '#multiple' => true,
+    '#default_value' => !empty($options['index_options'][$index->machine_name]['excluded_content_types']) ? $options['index_options'][$index->machine_name]['excluded_content_types'] : array(),
+    '#size' => 8,
+  );
+
   $form['submit_warning'] = array(
     '#type' => 'markup',
     '#markup' => '<p class="warning">' . t('Making changes to the configuration here will update the CloudSearch domain.
@@ -146,6 +172,9 @@ function search_api_amazon_cloudsearch_index_setup_submit($form, &$form_state) {
   }
   if (!empty($form_state['values']['ranges'])) {
     $options['index_options'][$index->machine_name]['ranges'] = $form_state['values']['ranges'];
+  }
+  if (!empty($form_state['values']['excluded_content_types'])) {
+    $options['index_options'][$index->machine_name]['excluded_content_types'] = $form_state['values']['excluded_content_types'];
   }
   if (!empty($form_state['values']['sort_expression'])) {
     $options['index_options'][$index->machine_name]['sort_expression'] = $form_state['values']['sort_expression'];

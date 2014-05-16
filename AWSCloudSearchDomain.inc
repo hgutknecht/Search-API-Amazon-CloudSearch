@@ -636,10 +636,18 @@ class AWSCloudSearchDomain {
   public function updateDocuments($items) {
     $json = array();
     $field_values = array();
+    $excluded_content_types = $this->serverOptions['index_options'][$this->indexMachineName]['excluded_content_types'];
+    $skip_counter = 0;
 
     foreach ($items as $key => $item) {
+      if (!empty($excluded_content_types[$item['type']['value']])) {
+        $skip_counter++;
+        continue;
+      }
+
       // Values array holds all the fields for this item.
       $values = array();
+
 
       // Add the standard document index machine name field to document, unless
       // shared_field_mode is enabled, in which case use the defined site name.
@@ -652,7 +660,6 @@ class AWSCloudSearchDomain {
 
       // Iterate through each field for this item and create JSON SDF doc.
       foreach ($item as $name => $value) {
-
         /* Converts the Search API field name into a safe CloudSearch field
          * prefixing the index machine name so that this index documents
          * are isollated within the Domain.
@@ -718,7 +725,11 @@ class AWSCloudSearchDomain {
     if (!$status) {
       watchdog('search_api_amazon_cloudsearch', 'Failed to update update CloudSearch documents.',
         array(), WATCHDOG_ERROR);
+      return false;
     }
+
+    watchdog('search_api_amazon_cloudsearch', 'Completed updating CloudSearch documents. Skipped %skipped documents.',
+      array('%skipped' => $skip_counter), WATCHDOG_INFO);
 
     return true;
   }
@@ -747,8 +758,8 @@ class AWSCloudSearchDomain {
     $status = $this->submitJsonRequest(json_encode($json));
 
     if (!$status) {
-      watchdog('search_api_amazon_cloudsearch', 'Failed to remove documents from CloudSearch: %json.',
-        array('%json' => $json), WATCHDOG_ERROR);
+      watchdog('search_api_amazon_cloudsearch', 'Failed to remove documents from CloudSearch.',
+        array(), WATCHDOG_ERROR);
     }
 
     return true;
