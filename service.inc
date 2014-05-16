@@ -97,12 +97,14 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
       $form['shared_field_mode'] = array(
         '#type'  => 'checkbox',
         '#title'  => t('Enabled shared field mode?'),
+        '#default_value' => empty($this->options) ? '' : $this->options['shared_field_mode'],
         '#disabled' => true,
       );
 
       $form['shared_field_site_name'] = array(
         '#type'  => 'textfield',
         '#title'  => t('Shared field site name'),
+        '#default_value' => empty($this->options) ? '' : $this->options['shared_field_site_name'],
         '#disabled' => true,
       );
 

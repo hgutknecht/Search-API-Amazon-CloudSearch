@@ -98,23 +98,30 @@ class AWSCloudSearchQuery {
      * text-relevance field.
      */
     $sort = $search_api_query->getSort();
+    $sort_expression = $this->options['index_options'][$this->indexMachineName]['sort_expression'];
+    $sort_order = $this->options['index_options'][$this->indexMachineName]['sort_order'];
     $r = '';
-    if ($sort) {
-      $r = '&rank=';
-      foreach ($sort as $field_name => $order) {
-        $r .= $order == 'DESC' ? '-' : '';
-        if ($field_name == 'search_api_relevance') {
-          $r .= 'text_relevance,';
-        }
-        elseif ($field_name == 'search_api_id') {
-          $r .= 'id,';
-        }
-        else {
-          $r .= AWSCloudSearchDomain::encodeIndexName($this->indexMachineName, 'sort_' . $field_name) . ',';
-        }
-      }
-      $r = rtrim($r, ',');
+    if ($sort_expression) {
+      $r = '&sort=' . $sort_expression;
+      $r .= $sort_order ? '+asc' : '+desc';
     }
+    // TODO - Figure out how to handle search api driven sorting
+    // else if ($sort) {
+    //   $r = '&sort=';
+    //   foreach ($sort as $field_name => $order) {
+    //     $r .= $order == 'DESC' ? '+desc' : '+asc';
+    //     if ($field_name == 'search_api_relevance') {
+    //       $r .= '_score,';
+    //     }
+    //     elseif ($field_name == 'search_api_id') {
+    //       $r .= 'id,';
+    //     }
+    //     else {
+    //       $r .= AWSCloudSearchDomain::encodeIndexName($this->indexMachineName, 'sort_' . $field_name) . ',';
+    //     }
+    //   }
+    //   $r = rtrim($r, ',');
+    // }
 
     // Combine into CloudSearch query string.
     $query_params = "{$q}&{$site_facet}{$f}{$r}&{$rtn}{$page_size}{$currentpage}";
@@ -125,7 +132,7 @@ class AWSCloudSearchQuery {
 
     // Send query to CloudSearch endpoint.
     $response = json_decode($this->submitSearch($query_params));
-
+    
     // Check response and report if in error.
     if ($response == NULL) {
       drupal_set_message(check_plain(t('Critial failure when calling CloudSearch')), 'error');

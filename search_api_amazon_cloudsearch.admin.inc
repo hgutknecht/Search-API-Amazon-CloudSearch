@@ -56,6 +56,34 @@ function search_api_amazon_cloudsearch_index_setup($form, &$form_state, SearchAp
     '#title' => 'Amazon CloudSearch field configuration options',
   );
 
+  $form['fieldset_sort_params'] = array(
+    '#type' => 'fieldset',
+    '#group' => 'vtab',
+    '#title' => t('Results ranking'),
+    '#description' => t('Settings related to adjusting the way results are returned.'),
+  );
+
+  $form['fieldset_sort_params']['sort_expression'] = array(
+    '#type'  => 'textfield',
+    '#title'  => t('Sort expression'),
+    '#description' => t('Specify a predefined sort expression to use for results sorting.'),
+    '#default_value' => !empty($options['index_options'][$index->machine_name]['sort_expression'])
+      ? $options['index_options'][$index->machine_name]['sort_expression']
+      : '',
+  );
+
+   $sort_opts = array(0 => t('Descending'), 1 => t('Ascending'));
+
+   $form['fieldset_sort_params']['sort_order'] = array(
+    '#type' => 'radios',
+    '#title' => t('Sort order'),
+    '#default_value' => !empty($options['index_options'][$index->machine_name]['sort_order'])
+      ? $options['index_options'][$index->machine_name]['sort_order']
+      : 0,
+    '#options' => $sort_opts,
+    '#description' => t('Results sort order.'),
+  );
+
   $form['fieldset_sorts'] = array(
     '#type' => 'fieldset',
     '#group' => 'vtab',
@@ -118,6 +146,12 @@ function search_api_amazon_cloudsearch_index_setup_submit($form, &$form_state) {
   }
   if (!empty($form_state['values']['ranges'])) {
     $options['index_options'][$index->machine_name]['ranges'] = $form_state['values']['ranges'];
+  }
+  if (!empty($form_state['values']['sort_expression'])) {
+    $options['index_options'][$index->machine_name]['sort_expression'] = $form_state['values']['sort_expression'];
+  }
+  if (isset($form_state['values']['sort_order'])) {
+    $options['index_options'][$index->machine_name]['sort_order'] = $form_state['values']['sort_order'];
   }
 
   $index->server()->update(array('options' => $options));
