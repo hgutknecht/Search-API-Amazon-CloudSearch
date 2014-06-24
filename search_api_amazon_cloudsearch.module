@@ -76,7 +76,7 @@ function search_api_amazon_cloudsearch_menu_access($index) {
     return false;
   }
   else {
-    return user_access('administer') && user_access('search_api');
+    return user_access('administer') && user_access('administer search api');
   }
 
 }

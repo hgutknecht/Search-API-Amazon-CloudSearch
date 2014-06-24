@@ -14,11 +14,16 @@ class AWSCloudSearchQuery {
   protected $indexMachineName;
   protected $query;
   protected $serverFieldOptions;
+  protected $sharedFieldSiteName;
+  protected $sharedFieldMode;
   /**
    * Constructor.
    */
   public function __construct($ops) {
     $this->options = $ops;
+    $this->sharedFieldMode = !empty($ops['shared_field_mode']) ? $ops['shared_field_mode'] : false;
+    $this->sharedFieldSiteName = !empty($ops['shared_field_site_name']) ? $ops['shared_field_site_name'] : '';
+
   }
 
   /**
@@ -27,12 +32,10 @@ class AWSCloudSearchQuery {
    * Sets up Facets and returns the Ids.
    */
   public function execute(SearchApiQueryInterface $search_api_query) {
-    watchdog('search_api_amazon_cloudsearch', 'Executing search query',
-      array(), WATCHDOG_DEBUG);
-
     $query_options = $search_api_query->GetOptions();
     $this->indexMachineName = $search_api_query->getIndex()->machine_name;
     $this->query = $search_api_query;
+
 
     // Get the CloudSearch server specific field options for this index.
     $this->serverFieldOptions = $this->query->getIndex()->server()->options['index_options'][$this->indexMachineName]['fields'];
@@ -59,7 +62,12 @@ class AWSCloudSearchQuery {
     $q = $keys == '' ? 'q=%' : "q={$keys}";
 
     // Always add a facet to limit searches to this site only
-    $site_facet = "facet.search_api_document_index_machine_name={buckets:['$this->indexMachineName']}";
+    if ($this->sharedFieldMode) {
+      $site_facet = "&fq=search_api_document_index_machine_name:'$this->sharedFieldSiteName'";
+    } else {
+      $site_facet = "&fq=search_api_document_index_machine_name:'$this->indexMachineName'";
+    }
+
 
     /* Return values, this is pretty simple in SearchAPI,
      * it only requires the item ID, we add text_relevance to
@@ -124,15 +132,17 @@ class AWSCloudSearchQuery {
     // }
 
     // Combine into CloudSearch query string.
-    $query_params = "{$q}&{$site_facet}{$f}{$r}&{$rtn}{$page_size}{$currentpage}";
+    $query_params = "{$q}{$site_facet}{$f}{$r}&{$rtn}{$page_size}{$currentpage}";
 
     if ($structured) {
       $query_params .= '&q.parser=structured';
     }
 
+    watchdog('search_api_amazon_cloudsearch', 'Executing search query with params: %params',
+      array('%params' => $query_params), WATCHDOG_DEBUG);
     // Send query to CloudSearch endpoint.
     $response = json_decode($this->submitSearch($query_params));
-    
+
     // Check response and report if in error.
     if ($response == NULL) {
       drupal_set_message(check_plain(t('Critial failure when calling CloudSearch')), 'error');
@@ -156,7 +166,7 @@ class AWSCloudSearchQuery {
     $results['results'] = array();
     $results['result count'] = $response->hits->found;
     foreach ($response->hits->hit as $hit) {
-      $id = str_replace("{$this->indexMachineName}_", '', $hit->id);
+      $id = end(explode('_', $hit->id));
       $results['results'][$id] = array(
         'id' => $id,
         'score' => $hit->fields->_score,

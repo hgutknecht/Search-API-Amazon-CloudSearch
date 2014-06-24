@@ -713,7 +713,7 @@ class AWSCloudSearchDomain {
        */
       $json[] = array(
         'type' => 'add',
-        'id' => self::createId($this->indexMachineName, $key),
+        'id' => self::createId($this->indexMachineName, $key, $this->sharedFieldSiteName),
         'fields' => $values,
       );
 
@@ -749,7 +749,7 @@ class AWSCloudSearchDomain {
     foreach ($ids as $id) {
       $json[] = array(
         'type' => 'delete',
-        'id' => $this->createId($this->indexMachineName, $id),
+        'id' => $this->createId($this->indexMachineName, $id, $this->sharedFieldSiteName),
         'version' => time(),
       );
     }
@@ -879,8 +879,14 @@ class AWSCloudSearchDomain {
    * Makes it specific to an index by simply
    * combining the Index id and item id.
    */
-  protected static function createId($index_id, $item_id) {
-    return $index_id . '_' . $item_id;
+  protected static function createId($index_id, $item_id, $shared_field_site_name = NULL) {
+    if ($shared_field_site_name) {
+      return $shared_field_site_name . '_' . $index_id . '_' . $item_id;
+    }
+    else {
+      return $index_id . '_' . $item_id;
+    }
+
   }
 
 }
