@@ -75,6 +75,13 @@ class AWSCloudSearchQuery {
      */
     $rtn = "return=_score";
 
+    if (!empty($this->options['additional_fields'])) {
+      $additional_fields = explode(',', str_replace(' ', '', $this->options['additional_fields']));
+      foreach ($additional_fields as $field) {
+        $rtn .= ',' . $field;
+      }
+    }
+
     // Add facets (if applicable).
     $facets = array();
     $f = '';
@@ -169,8 +176,10 @@ class AWSCloudSearchQuery {
       $id = end(explode('_', $hit->id));
       $results['results'][$id] = array(
         'id' => $id,
-        'score' => $hit->fields->_score,
       );
+      foreach ($hit->fields as $name => $value) {
+        $results['results'][$id][$name] = $value;
+      }
     }
 
     // Facets.

@@ -125,6 +125,14 @@ class SearchApiCloudSearchService extends SearchApiAbstractService {
       '#default_value' => empty($this->options) ? '' : $this->options['show_debug'],
     );
 
+    $form['additional_fields'] = array(
+      '#type'  => 'textfield',
+      '#title'  => t('Additional fields'),
+      '#required' => FALSE,
+      '#description' => t('Specify additional fields to be retrieved from Cloudsearch, separate each field with a comma'),
+      '#default_value' => empty($this->options) ? '' : $this->options['additional_fields'],
+    );
+
     return $form;
   }
 
