@@ -102,12 +102,10 @@ class AWSCloudSearchQuery {
     $filters = $search_api_query->getFilter();
     if (count($filters->getFilters()) > 0) {
       $structured = true;
-
-      $q .= "(and (term {$keys}) ";
+      $q = $keys == '' ? "q=(and '" . "%" . "'" : "q=(and '" . "{$keys}" . "'";
       $this->createFilterCondition($filters, 0, $q);
       $q .= ')';
     }
-
 
     /* Sort.  If no sort specified CloudSearch will default to
      * text-relevance field.
