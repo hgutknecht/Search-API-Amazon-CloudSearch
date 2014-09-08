@@ -59,7 +59,8 @@ class AWSCloudSearchQuery {
     // Standard keyword search.
     $structured = false;
     $keys = $this->combineKeys($this->prepareKeys($search_api_query->getKeys()));
-    $q = $keys == '' ? 'q=%' : "q={$keys}";
+    // Match all documents by default. This is used by search API to count documents
+    $q = ($keys == '') ? '?q=matchall&q.parser=structured' : "q={$keys}";
 
     // Always add a facet to limit searches to this site only
     if ($this->sharedFieldMode) {
@@ -157,9 +158,9 @@ class AWSCloudSearchQuery {
       return array();
     }
     elseif (isset($response->error)) {
-      drupal_set_message(check_plain(t('CloudSearch returned an error:') . $response->error->message), 'error');
+      drupal_set_message(check_plain(t('CloudSearch returned an error:') . $response->message), 'error');
       watchdog('aws_cloudsearch', 'CloudSearch returned an error. Error was %error_message | Request was: %query_string',
-        array('%query_string' => $query_params, '%error_message' => $response->error->message), WATCHDOG_CRITICAL, $link = NULL);
+        array('%query_string' => $query_params, '%error_message' => $response->message), WATCHDOG_CRITICAL, $link = NULL);
 
       return array();
     }
@@ -214,6 +215,20 @@ class AWSCloudSearchQuery {
     foreach ($filter->getFilters() as $f) {
       if (is_array($f)) {
         $val = $this->getFinalFieldFilterValue($f);
+        // Each index has a different language field. Search using an or condition across all the language fields.
+        // This allows us to pull in players and posts into the same language search.
+        if ($f[0] === 'search_api_language' && $val !== "'und'") {
+          $all_indexes = search_api_index_load_multiple(FALSE, array('enabled' => 1));
+          if (count($all_indexes) > 1) {
+            $q_filter .= '(or ';
+            foreach ($all_indexes as $index) {
+              $fname = AWSCloudSearchDomain::encodeIndexName($index->machine_name, $f[0]);
+              $q_filter .= " {$fname}:{$val} {$fname}:'und' ";
+            }
+            $q_filter .= ')';
+            continue;
+          }
+        }
         $field_type = $this->serverFieldOptions[$f[0]]['index_type'];
         $fname = AWSCloudSearchDomain::encodeIndexName($this->indexMachineName, $f[0]);
         // Setup condition based on operand.
