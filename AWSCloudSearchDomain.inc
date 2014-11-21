@@ -635,6 +635,7 @@ class AWSCloudSearchDomain {
    */
   public function updateDocuments($items) {
     $json = array();
+    $item_ids = array();
     $field_values = array();
     $excluded_content_types = $this->serverOptions['index_options'][$this->indexMachineName]['excluded_content_types'];
     $skip_counter = 0;
@@ -694,6 +695,8 @@ class AWSCloudSearchDomain {
         }
       }
 
+      $items_ids[] = $item['nid'];
+
       /* Create the SDF array that will be encoded into Json and sent to AWS.
        *
        * Version: CloudSearch requires a version number.  The version must
@@ -719,12 +722,20 @@ class AWSCloudSearchDomain {
 
     }
 
+    // If no valid matching documents types (e.g. all images were sent) are found, the entire batch will be empty.
+    // This is not an error, just skip it and let indexing keep going.
+    if (empty($json)) {
+      watchdog('search_api_amazon_cloudsearch', 'No valid documents found to update, skipping batch.',
+      array(), WATCHDOG_ERROR);
+      return true;
+    }
+
     // Encode the SDF array and post to CloudSearch Document endpoint.
     $status = $this->submitJsonRequest(json_encode($json));
 
     if (!$status) {
-      watchdog('search_api_amazon_cloudsearch', 'Failed to update update CloudSearch documents.',
-        array(), WATCHDOG_ERROR);
+      watchdog('search_api_amazon_cloudsearch', 'Failed to update update CloudSearch documents. Attempted batch ids: %batch_ids',
+        array('%batch_ids' => print_r($items_ids, true)), WATCHDOG_ERROR);
       return false;
     }
 

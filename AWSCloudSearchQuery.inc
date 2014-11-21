@@ -36,7 +36,6 @@ class AWSCloudSearchQuery {
     $this->indexMachineName = $search_api_query->getIndex()->machine_name;
     $this->query = $search_api_query;
 
-
     // Get the CloudSearch server specific field options for this index.
     $this->serverFieldOptions = $this->query->getIndex()->server()->options['index_options'][$this->indexMachineName]['fields'];
 
@@ -60,7 +59,7 @@ class AWSCloudSearchQuery {
     $structured = false;
     $keys = $this->combineKeys($this->prepareKeys($search_api_query->getKeys()));
     // Match all documents by default. This is used by search API to count documents
-    $q = ($keys == '') ? '?q=matchall&q.parser=structured' : "q={$keys}";
+    $q = ($keys == '') ? 'q=matchall&q.parser=structured' : "q={$keys}";
 
     // Always add a facet to limit searches to this site only
     if ($this->sharedFieldMode) {
@@ -385,6 +384,7 @@ class AWSCloudSearchQuery {
    * Helper method for combining keys to search query.
    */
   protected function combineKeys($keys) {
+
     if (is_scalar($keys)) {
       return $keys;
     }
@@ -405,6 +405,11 @@ class AWSCloudSearchQuery {
           break;
       }
       unset($keys['#conjunction']);
+    }
+
+    // combineKeys does get called with no data
+    if (empty($key)) {
+      return;
     }
 
     return implode($op, $keys);
