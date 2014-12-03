@@ -408,7 +408,7 @@ class AWSCloudSearchQuery {
     }
 
     // combineKeys does get called with no data
-    if (empty($key)) {
+    if (empty($keys)) {
       return;
     }
 
