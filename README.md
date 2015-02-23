@@ -4,6 +4,8 @@ Search API CloudSearch
 Offers an implementation of the Search API that uses an Amazon 
 AWS CloudSearch server for indexing content.
 
+[d.o project page](https://www.drupal.org/project/search_api_amazon_cloudsearch)
+
 Prerequisites
 ---------------
 
